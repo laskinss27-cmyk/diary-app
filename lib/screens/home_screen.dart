@@ -16,6 +16,7 @@ import '../services/lexicon_analyzer.dart';
 import '../services/analysis_mode.dart';
 import '../widgets/avatar_picker.dart';
 import '../widgets/entry_card.dart';
+import '../widgets/welcome_banner.dart';
 import 'settings_screen.dart';
 import 'report_screen.dart';
 import 'calendar_screen.dart';
@@ -41,6 +42,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   String _userName = '';
   AvatarData _avatar = AvatarData.defaultAvatar;
+  WelcomeContext? _welcomeContext;
+  late final DateTime _openedAt = DateTime.now();
 
   // Photo attachments
   final List<String> _pendingPhotos = [];
@@ -75,10 +78,20 @@ class _HomeScreenState extends State<HomeScreen>
     final loaded = await StorageService.loadEntries();
     final profile = await StorageService.loadProfile();
     final avatar = await StorageService.loadAvatar();
+    // Compute welcome context only on the first load (cold start),
+    // not on every refresh after returning from a child screen.
+    WelcomeContext? ctx = _welcomeContext;
+    if (ctx == null) {
+      final lastOpen = await StorageService.loadLastOpen();
+      ctx = computeWelcomeContext(lastOpen, _openedAt);
+      // Stamp this open so the next launch can compute its own context.
+      await StorageService.saveLastOpen(_openedAt);
+    }
     setState(() {
       _entries = loaded;
       _userName = profile['name'] ?? '';
       _avatar = avatar;
+      _welcomeContext = ctx;
     });
   }
 
@@ -326,15 +339,6 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() => _entries.removeAt(index));
   }
 
-  String _greeting() {
-    final hour = DateTime.now().hour;
-    final name = _userName.isNotEmpty ? ', $_userName' : '';
-    if (hour < 6) return 'Доброй ночи$name!';
-    if (hour < 12) return 'Доброе утро$name!';
-    if (hour < 18) return 'Добрый день$name!';
-    return 'Добрый вечер$name!';
-  }
-
   @override
   Widget build(BuildContext context) {
     final t = DiaryApp.themeNotifier.theme;
@@ -343,23 +347,13 @@ class _HomeScreenState extends State<HomeScreen>
       backgroundColor: t.background,
       appBar: AppBar(
         backgroundColor: t.primary,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AvatarWidget(data: _avatar, size: 32),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                _greeting(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 18,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+        title: const Text(
+          'Дневник',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 18,
+          ),
         ),
         centerTitle: true,
         elevation: 0,
@@ -400,6 +394,14 @@ class _HomeScreenState extends State<HomeScreen>
       ),
       body: Column(
         children: [
+          // Warm welcome banner — animated on cold start, persistent thereafter.
+          if (_welcomeContext != null)
+            WelcomeBanner(
+              userName: _userName,
+              avatar: _avatar,
+              context: _welcomeContext!,
+              now: _openedAt,
+            ),
           // Input card with animation
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),

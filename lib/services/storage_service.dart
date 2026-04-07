@@ -15,6 +15,7 @@ class StorageService {
   static const _themeKey = 'app_theme';
   static const _onboardedKey = 'onboarded';
   static const _migratedKey = 'migrated_to_db';
+  static const _lastOpenKey = 'last_open_at';
 
   /// Migrate old SharedPreferences entries to SQLite (one-time)
   static Future<void> migrateIfNeeded() async {
@@ -127,5 +128,21 @@ class StorageService {
   static Future<void> setOnboarded() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_onboardedKey, true);
+  }
+
+  // --- Last open timestamp (for contextual greetings) ---
+
+  /// Returns the last time the home screen was opened, or null if it's the
+  /// very first launch after onboarding.
+  static Future<DateTime?> loadLastOpen() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ms = prefs.getInt(_lastOpenKey);
+    if (ms == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  static Future<void> saveLastOpen(DateTime when) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_lastOpenKey, when.millisecondsSinceEpoch);
   }
 }
