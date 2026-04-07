@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'models/app_theme.dart';
 import 'services/storage_service.dart';
 import 'services/notification_service.dart';
-import 'screens/home_screen.dart';
-import 'screens/onboarding_screen.dart';
+import 'screens/splash_screen.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  // Hold the native splash on screen until our Dart splash is ready to take
+  // over — eliminates the bare-Flutter flash between native splash and our
+  // first frame.
+  FlutterNativeSplash.preserve(widgetsBinding: binding);
+
   await initializeDateFormatting('ru_RU', null);
   await NotificationService.init();
   await StorageService.migrateIfNeeded();
@@ -41,8 +46,7 @@ class DiaryApp extends StatefulWidget {
 }
 
 class _DiaryAppState extends State<DiaryApp> {
-  bool _loading = true;
-  bool _onboarded = false;
+  bool _themeReady = false;
 
   @override
   void initState() {
@@ -52,24 +56,20 @@ class _DiaryAppState extends State<DiaryApp> {
 
   Future<void> _init() async {
     await DiaryApp.themeNotifier.load();
-    final onboarded = await StorageService.isOnboarded();
-    setState(() {
-      _onboarded = onboarded;
-      _loading = false;
-    });
+    if (!mounted) return;
+    setState(() => _themeReady = true);
+    // The native splash can hand off to our Dart splash now.
+    FlutterNativeSplash.remove();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
+    if (!_themeReady) {
+      // While theme is loading the native splash is still on top, so this
+      // widget is never actually visible. Return a transparent placeholder.
       return const MaterialApp(
         debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          backgroundColor: Color(0xFFFFF0F5),
-          body: Center(
-            child: CircularProgressIndicator(color: Color(0xFFE8A0BF)),
-          ),
-        ),
+        home: SizedBox.shrink(),
       );
     }
 
@@ -88,11 +88,7 @@ class _DiaryAppState extends State<DiaryApp> {
             scaffoldBackgroundColor: t.background,
             useMaterial3: true,
           ),
-          home: _onboarded
-              ? const HomeScreen()
-              : OnboardingScreen(
-                  onComplete: () => setState(() => _onboarded = true),
-                ),
+          home: const SplashScreen(),
         );
       },
     );
