@@ -8,6 +8,7 @@ import '../services/pdf_service.dart';
 import '../services/gemini_service.dart';
 import '../services/analysis_mode.dart';
 import '../widgets/avatar_picker.dart';
+import '../widgets/city_autocomplete.dart';
 import '../widgets/disclaimer_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -21,6 +22,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _nameController = TextEditingController();
   final _ageController = TextEditingController();
   final _noteController = TextEditingController();
+  String _city = '';
   AvatarData _avatar = AvatarData.defaultAvatar;
   late String _selectedThemeId;
 
@@ -52,6 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _nameController.text = profile['name'] ?? '';
     _ageController.text = profile['age'] ?? '';
     _noteController.text = profile['note'] ?? '';
+    _city = profile['city'] ?? '';
 
     final avatar = await StorageService.loadAvatar();
     final notifSettings = await NotificationService.getSettings();
@@ -105,6 +108,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       name: _nameController.text.trim(),
       age: _ageController.text.trim(),
       note: _noteController.text.trim(),
+      city: _city.trim(),
     );
     await StorageService.saveAvatar(_avatar);
     if (mounted) {
@@ -381,6 +385,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 decoration:
                     _inputDecoration('Заметка для специалиста (необязательно)'),
                 maxLines: 2,
+              ),
+              const SizedBox(height: 10),
+              CityAutocomplete(
+                initialValue: _city,
+                theme: t,
+                onChanged: (v) => _city = v,
               ),
               const SizedBox(height: 14),
               SizedBox(

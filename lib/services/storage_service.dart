@@ -11,6 +11,7 @@ class StorageService {
   static const _userNameKey = 'user_name';
   static const _userAgeKey = 'user_age';
   static const _userNoteKey = 'user_note';
+  static const _userCityKey = 'user_city';
   static const _avatarKey = 'user_avatar';
   static const _themeKey = 'app_theme';
   static const _onboardedKey = 'onboarded';
@@ -74,6 +75,7 @@ class StorageService {
       'name': prefs.getString(_userNameKey) ?? '',
       'age': prefs.getString(_userAgeKey) ?? '',
       'note': prefs.getString(_userNoteKey) ?? '',
+      'city': prefs.getString(_userCityKey) ?? '',
     };
   }
 
@@ -81,11 +83,13 @@ class StorageService {
     required String name,
     required String age,
     required String note,
+    String city = '',
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_userNameKey, name);
     await prefs.setString(_userAgeKey, age);
     await prefs.setString(_userNoteKey, note);
+    await prefs.setString(_userCityKey, city);
   }
 
   // --- Avatar ---

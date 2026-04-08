@@ -3,6 +3,7 @@ import '../models/app_theme.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 import '../widgets/avatar_picker.dart';
+import '../widgets/city_autocomplete.dart';
 import '../widgets/disclaimer_dialog.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -20,6 +21,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   int _currentPage = 0;
 
   final _nameController = TextEditingController();
+  String _city = '';
   AvatarData _avatar = AvatarData.defaultAvatar;
   String _selectedThemeId = AppThemes.defaultThemeId;
 
@@ -96,6 +98,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       name: _nameController.text.trim(),
       age: '',
       note: '',
+      city: _city.trim(),
     );
     await StorageService.saveAvatar(_avatar);
     await StorageService.saveThemeId(_selectedThemeId);
@@ -246,6 +249,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               filled: true,
               fillColor: _theme.cardColor,
             ),
+          ),
+          const SizedBox(height: 14),
+          CityAutocomplete(
+            initialValue: _city,
+            theme: _theme,
+            onChanged: (v) => _city = v,
           ),
         ],
       ),
