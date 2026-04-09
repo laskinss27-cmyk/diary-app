@@ -16,10 +16,12 @@ import '../services/lexicon_analyzer.dart';
 import '../services/analysis_mode.dart';
 import '../widgets/avatar_picker.dart';
 import '../widgets/entry_card.dart';
+import '../widgets/gentle_crisis_dialog.dart';
 import '../widgets/welcome_banner.dart';
 import 'settings_screen.dart';
 import 'report_screen.dart';
 import 'calendar_screen.dart';
+import 'help_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -331,6 +333,35 @@ class _HomeScreenState extends State<HomeScreen>
       _pendingPhotos.clear();
       _saving = false;
     });
+
+    // Если анализ обнаружил кризисные маркеры — мягко предложим помощь.
+    // Делаем после setState, чтобы список успел обновиться, и диалог
+    // появился уже поверх нормального состояния UI.
+    if (_isCrisisAnalysis(analysis) && mounted) {
+      // Небольшая задержка, чтобы пользователь успел увидеть, что
+      // его запись сохранилась, и не почувствовал, что диалог —
+      // это "ответ" на написанное.
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      if (!mounted) return;
+      await GentleCrisisDialog.show(context);
+    }
+  }
+
+  /// Проверяет, содержит ли анализ признаки кризисного состояния.
+  /// Оба анализатора (LexiconAnalyzer и MoodFallback) в этом случае
+  /// помечают запись через keywords ("кризисное состояние",
+  /// "суицидальные мысли", "самоповреждение") и ставят score = 1.
+  bool _isCrisisAnalysis(MoodAnalysis a) {
+    if (a.score <= 1) return true;
+    for (final k in a.keywords) {
+      final low = k.toLowerCase();
+      if (low.contains('кризис') ||
+          low.contains('суицид') ||
+          low.contains('самоповрежд')) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Future<void> _deleteEntry(int index) async {
@@ -358,6 +389,14 @@ class _HomeScreenState extends State<HomeScreen>
         centerTitle: true,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.favorite_border_rounded, color: Colors.white),
+            tooltip: 'Если тебе тяжело',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const HelpScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.calendar_month_rounded, color: Colors.white),
             tooltip: 'Календарь',

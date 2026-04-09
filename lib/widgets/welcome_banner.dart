@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../main.dart';
+import '../screens/help_screen.dart';
 import 'avatar_picker.dart';
 
 /// How long ago the user was last seen — drives the subtitle phrasing.
@@ -167,38 +168,81 @@ class _WelcomeBannerState extends State<WelcomeBanner>
               width: 1,
             ),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              AvatarWidget(data: widget.avatar, size: 52),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      headline,
-                      style: TextStyle(
-                        color: t.textPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        height: 1.2,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  AvatarWidget(data: widget.avatar, size: 52),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          headline,
+                          style: TextStyle(
+                            color: t.textPrimary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            height: 1.2,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            color: t.textSecondary,
+                            fontSize: 13.5,
+                            height: 1.35,
+                          ),
+                          maxLines: 3,
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: t.textSecondary,
-                        fontSize: 13.5,
-                        height: 1.35,
-                      ),
-                      maxLines: 3,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // Мягкая, ненавязчивая ссылка на раздел помощи. Всегда
+              // доступна, но не кричит — маленький шрифт и выравнивание
+              // к правому нижнему углу карточки.
+              Align(
+                alignment: Alignment.centerRight,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const HelpScreen()),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.favorite_border_rounded,
+                          size: 13,
+                          color: t.primary.withValues(alpha: 0.75),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Если тебе тяжело — мы рядом',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: t.primary.withValues(alpha: 0.85),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ],
