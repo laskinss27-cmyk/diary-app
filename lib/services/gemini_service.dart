@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/diary_entry.dart';
+import 'secrets.dart';
 
 class ApiConfig {
   final String baseUrl;
@@ -17,11 +18,15 @@ class ApiConfig {
 
   bool get isConfigured => baseUrl.isNotEmpty && apiKey.isNotEmpty && model.isNotEmpty;
 
-  // Default built-in config
+  // Default built-in config.
+  // Значения берутся из lib/services/secrets.dart, который находится
+  // в .gitignore и не попадает в публичный репозиторий. Если secrets.dart
+  // пуст — isConfigured вернёт false, и приложение автоматически
+  // переключится на оффлайн-анализатор.
   static const defaultConfig = ApiConfig(
-    baseUrl: 'REDACTED_BASE_URL',
-    apiKey: 'REDACTED_API_KEY',
-    model: 'claude-sonnet-4-6',
+    baseUrl: Secrets.defaultBaseUrl,
+    apiKey: Secrets.defaultApiKey,
+    model: Secrets.defaultModel,
   );
 
   // Presets for quick setup

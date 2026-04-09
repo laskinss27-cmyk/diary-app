@@ -62,3 +62,8 @@ desktop.ini
 # User data that могло осесть в проекте при тестах
 *.db
 *.sqlite
+
+# Secrets — API-ключи и любые приватные константы.
+# secrets.example.dart коммитим как шаблон, secrets.dart — никогда.
+lib/services/secrets.dart
+lib/secrets.dart
