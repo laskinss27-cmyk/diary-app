@@ -52,5 +52,17 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>
         </intent>
+        <!-- Required by url_launcher on Android 11+ so canLaunchUrl()
+             can detect that a dialer app exists for tel: URIs. Without
+             this, telephone buttons in the "Если плохо" screen silently
+             do nothing. -->
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="tel"/>
+        </intent>
     </queries>
 </manifest>

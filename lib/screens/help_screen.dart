@@ -45,27 +45,54 @@ class _HelpScreenState extends State<HelpScreen> {
     });
   }
 
+  /// Не используем canLaunchUrl как фильтр — на Android 11+ он требует
+  /// декларации <queries> в манифесте и может вернуть false даже когда
+  /// звонилка реально установлена. Пытаемся запустить сразу и ловим
+  /// ошибку, чтобы показать пользователю видимый фидбек вместо тихого
+  /// "кнопка не работает".
   Future<void> _call(String phone) async {
     if (phone.isEmpty) return;
-    final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+    // Очищаем от пробелов/скобок/дефисов, оставляем только цифры и +
+    final digits = phone.replaceAll(RegExp(r'[^\d+]'), '');
+    final uri = Uri.parse('tel:$digits');
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        _showSnack('Не удалось открыть звонилку. Номер: $phone');
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Не удалось позвонить. Номер: $phone');
     }
   }
 
   Future<void> _openWhatsApp(String number) async {
     final cleaned = number.replaceAll(RegExp(r'[^\d+]'), '');
     final uri = Uri.parse('https://wa.me/${cleaned.replaceAll('+', '')}');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) _showSnack('Не удалось открыть WhatsApp.');
+    } catch (_) {
+      if (mounted) _showSnack('Не удалось открыть WhatsApp.');
     }
   }
 
   Future<void> _openUrl(String url) async {
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) _showSnack('Не удалось открыть ссылку.');
+    } catch (_) {
+      if (mounted) _showSnack('Не удалось открыть ссылку.');
     }
+  }
+
+  void _showSnack(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   @override

@@ -17,6 +17,7 @@ import '../services/analysis_mode.dart';
 import '../widgets/avatar_picker.dart';
 import '../widgets/entry_card.dart';
 import '../widgets/gentle_crisis_dialog.dart';
+import '../widgets/mood_flask.dart';
 import '../widgets/welcome_banner.dart';
 import 'settings_screen.dart';
 import 'report_screen.dart';
@@ -327,6 +328,10 @@ class _HomeScreenState extends State<HomeScreen>
 
     await DatabaseService.insertEntry(entry);
 
+    // Убираем фокус с поля ввода → клавиатура скрывается → снова
+    // видна колба (её анимацию налива иначе пользователь пропустит).
+    if (mounted) FocusScope.of(context).unfocus();
+
     setState(() {
       _entries.insert(0, entry);
       _textController.clear();
@@ -433,14 +438,22 @@ class _HomeScreenState extends State<HomeScreen>
       ),
       body: Column(
         children: [
-          // Warm welcome banner — animated on cold start, persistent thereafter.
-          if (_welcomeContext != null)
-            WelcomeBanner(
-              userName: _userName,
-              avatar: _avatar,
-              context: _welcomeContext!,
-              now: _openedAt,
-            ),
+          // When the keyboard is up, hide the welcome banner and mood flask
+          // so the input card + a glimpse of recent entries remain visible
+          // and the layout doesn't overflow. User is focused on writing —
+          // decorations are not needed in that moment.
+          if (MediaQuery.of(context).viewInsets.bottom == 0) ...[
+            // Warm welcome banner — animated on cold start, persistent thereafter.
+            if (_welcomeContext != null)
+              WelcomeBanner(
+                userName: _userName,
+                avatar: _avatar,
+                context: _welcomeContext!,
+                now: _openedAt,
+              ),
+            // Mood flask — visual summary of the last N entries.
+            MoodFlask(entries: _entries),
+          ],
           // Input card with animation
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
