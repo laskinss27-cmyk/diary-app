@@ -89,6 +89,20 @@ class LexiconAnalyzer {
     'немного', 'чуть', 'слегка', 'отчасти', 'едва', 'почти',
   };
 
+  static const _stopwords = {
+    'просто', 'вообще', 'вот', 'ну', 'да', 'же', 'только',
+    'уже', 'тут', 'там', 'сам', 'себе', 'как', 'так',
+    'еще', 'ещё', 'что', 'это', 'то', 'все', 'всё',
+    'будет', 'было', 'были', 'быть', 'бы', 'ли',
+    'мне', 'меня', 'мой', 'моя', 'мои', 'наш', 'наша',
+    'его', 'её', 'их', 'свой', 'своя', 'свои',
+    'какой', 'какая', 'какие', 'какое', 'этот', 'эта', 'эти',
+    'потом', 'затем', 'тогда', 'когда', 'где', 'куда',
+    'может', 'можно', 'нужно', 'надо', 'стоит',
+    'типа', 'короче', 'кстати', 'впрочем', 'кажется',
+    'ладно', 'ок', 'окей', 'хорошо', 'давай',
+  };
+
   /// Markers of skepticism / rhetorical questions / hedging.
   /// When found, positive contributions in the same sentence are heavily
   /// discounted (because the writer is doubting, not feeling).
@@ -172,6 +186,7 @@ class LexiconAnalyzer {
     for (var i = 0; i < stems.length; i++) {
       final stem = stems[i];
       if (stem.isEmpty) continue;
+      if (_stopwords.contains(tokens[i])) continue;
 
       // Determine modifier from previous tokens (window of 3).
       double modifier = 1.0;
@@ -375,7 +390,7 @@ class LexiconAnalyzer {
     } else if (balance < -1.5) {
       score = 2;
       emoji = '😢';
-      brief = 'Выражено сильное негативное состояние.';
+      brief = 'Тяжёлый день. Много негатива.';
       keywords = _topN(foundNeg, 4, fallback: ['грусть', 'тяжесть']);
     } else if (balance < -0.5) {
       score = 3;
