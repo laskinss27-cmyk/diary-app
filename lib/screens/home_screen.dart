@@ -17,7 +17,7 @@ import '../services/analysis_mode.dart';
 import '../widgets/avatar_picker.dart';
 import '../widgets/entry_card.dart';
 import '../widgets/gentle_crisis_dialog.dart';
-import '../widgets/mood_flask.dart';
+import '../widgets/mood_vase.dart';
 import '../widgets/welcome_banner.dart';
 import 'settings_screen.dart';
 import 'report_screen.dart';
@@ -40,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isListening = false;
   bool _speechAvailable = false;
   bool _saving = false;
+  bool _isInputOpen = false;
   String _textBeforeListening = '';
   bool _restarting = false;
 
@@ -337,6 +338,7 @@ class _HomeScreenState extends State<HomeScreen>
       _textController.clear();
       _pendingPhotos.clear();
       _saving = false;
+      _isInputOpen = false;
     });
 
     // Если анализ обнаружил кризисные маркеры — мягко предложим помощь.
@@ -452,124 +454,167 @@ class _HomeScreenState extends State<HomeScreen>
                 now: _openedAt,
               ),
             // Mood flask — visual summary of the last N entries.
-            MoodFlask(entries: _entries),
+            MoodVase(entries: _entries),
           ],
-          // Input card with animation
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: t.cardColor,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: t.cardShadow.withValues(alpha: 0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Как прошёл твой день?',
-                  style: TextStyle(
-                    color: t.textSecondary,
-                    fontWeight: FontWeight.w500,
-                    fontSize: 14,
+          // "Написать" button or expandable input card
+          if (!_isInputOpen)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => setState(() => _isInputOpen = true),
+                  icon: const Icon(Icons.edit_rounded, size: 20),
+                  label: const Text(
+                    'Написать',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: t.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 0,
                   ),
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _textController,
-                  maxLines: 4,
-                  style: TextStyle(color: t.textPrimary),
-                  decoration: InputDecoration(
-                    hintText: 'Напиши или надиктуй запись...',
-                    hintStyle:
-                        TextStyle(color: t.textHint.withValues(alpha: 0.5)),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          BorderSide(color: t.primary.withValues(alpha: 0.2)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          BorderSide(color: t.primary.withValues(alpha: 0.2)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: t.primary),
-                    ),
-                    filled: true,
-                    fillColor: t.brightness == Brightness.dark
-                        ? t.background
-                        : t.background.withValues(alpha: 0.5),
-                  ),
-                ),
-                // Photo preview strip
-                if (_pendingPhotos.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 72,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _pendingPhotos.length,
-                      itemBuilder: (context, i) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Stack(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: Image.file(
-                                  File(_pendingPhotos[i]),
-                                  width: 72,
-                                  height: 72,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                              Positioned(
-                                top: 2,
-                                right: 2,
-                                child: GestureDetector(
-                                  onTap: () => _removePhoto(i),
-                                  child: Container(
-                                    width: 22,
-                                    height: 22,
-                                    decoration: BoxDecoration(
-                                      color: Colors.black54,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.close,
-                                        color: Colors.white, size: 14),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+              ),
+            )
+          else
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: t.cardColor,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: t.cardShadow.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
                 ],
-                const SizedBox(height: 12),
-                // Action row
-                AnimatedBuilder(
-                  animation: _pulseAnimation,
-                  builder: (context, _) {
-                    if (_isListening) {
-                      return _buildRecordingRow(t);
-                    }
-                    return _buildNormalRow(t);
-                  },
-                ),
-              ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Как прошёл твой день?',
+                        style: TextStyle(
+                          color: t.textSecondary,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          if (_textController.text.trim().isEmpty &&
+                              _pendingPhotos.isEmpty) {
+                            setState(() => _isInputOpen = false);
+                            FocusScope.of(context).unfocus();
+                          }
+                        },
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 20,
+                          color: t.textHint,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _textController,
+                    maxLines: 4,
+                    autofocus: true,
+                    style: TextStyle(color: t.textPrimary),
+                    decoration: InputDecoration(
+                      hintText: 'Напиши или надиктуй запись...',
+                      hintStyle:
+                          TextStyle(color: t.textHint.withValues(alpha: 0.5)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide:
+                            BorderSide(color: t.primary.withValues(alpha: 0.2)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide:
+                            BorderSide(color: t.primary.withValues(alpha: 0.2)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: t.primary),
+                      ),
+                      filled: true,
+                      fillColor: t.brightness == Brightness.dark
+                          ? t.background
+                          : t.background.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  if (_pendingPhotos.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 72,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _pendingPhotos.length,
+                        itemBuilder: (context, i) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Image.file(
+                                    File(_pendingPhotos[i]),
+                                    width: 72,
+                                    height: 72,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 2,
+                                  right: 2,
+                                  child: GestureDetector(
+                                    onTap: () => _removePhoto(i),
+                                    child: Container(
+                                      width: 22,
+                                      height: 22,
+                                      decoration: BoxDecoration(
+                                        color: Colors.black54,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.close,
+                                          color: Colors.white, size: 14),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  AnimatedBuilder(
+                    animation: _pulseAnimation,
+                    builder: (context, _) {
+                      if (_isListening) {
+                        return _buildRecordingRow(t);
+                      }
+                      return _buildNormalRow(t);
+                    },
+                  ),
+                ],
+              ),
             ),
-          ),
           // Entries list
           Expanded(
             child: _entries.isEmpty
