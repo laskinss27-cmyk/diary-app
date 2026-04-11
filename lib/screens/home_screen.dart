@@ -19,6 +19,7 @@ import '../widgets/entry_card.dart';
 import '../widgets/gentle_crisis_dialog.dart';
 import '../widgets/mood_vase.dart';
 import '../widgets/welcome_banner.dart';
+import '../services/update_service.dart';
 import 'settings_screen.dart';
 import 'report_screen.dart';
 import 'calendar_screen.dart';
@@ -82,13 +83,11 @@ class _HomeScreenState extends State<HomeScreen>
     final loaded = await StorageService.loadEntries();
     final profile = await StorageService.loadProfile();
     final avatar = await StorageService.loadAvatar();
-    // Compute welcome context only on the first load (cold start),
-    // not on every refresh after returning from a child screen.
     WelcomeContext? ctx = _welcomeContext;
-    if (ctx == null) {
+    final firstLoad = ctx == null;
+    if (firstLoad) {
       final lastOpen = await StorageService.loadLastOpen();
       ctx = computeWelcomeContext(lastOpen, _openedAt);
-      // Stamp this open so the next launch can compute its own context.
       await StorageService.saveLastOpen(_openedAt);
     }
     setState(() {
@@ -97,6 +96,48 @@ class _HomeScreenState extends State<HomeScreen>
       _avatar = avatar;
       _welcomeContext = ctx;
     });
+    if (firstLoad) _checkForUpdate();
+  }
+
+  Future<void> _checkForUpdate() async {
+    final update = await UpdateService.checkForUpdate();
+    if (update == null || !mounted) return;
+    final t = DiaryApp.themeNotifier.theme;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: t.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Доступно обновление',
+          style: TextStyle(color: t.textPrimary, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'Новая версия: ${update.version}\n\nТекущая: $kCurrentVersion',
+          style: TextStyle(color: t.textSecondary, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Позже', style: TextStyle(color: t.textHint)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              UpdateService.openDownload(update.downloadUrl);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: t.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text('Скачать'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _initSpeech() async {
