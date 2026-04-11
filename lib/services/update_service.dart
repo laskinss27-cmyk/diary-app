@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
-const String kCurrentVersion = 'v0.3.0-alpha';
+const String kCurrentVersion = 'v0.3.1-alpha';
 
 const String _repoOwner = 'laskinss27-cmyk';
 const String _repoName = 'diary-app';
