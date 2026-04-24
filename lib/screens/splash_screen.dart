@@ -107,13 +107,16 @@ class _SplashScreenState extends State<SplashScreen>
         transitionDuration: const Duration(milliseconds: 450),
         pageBuilder: (_, a, b) => onboarded
             ? const HomeScreen()
-            : OnboardingScreen(
-                onComplete: () {
-                  // After onboarding, replace with home.
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const HomeScreen()),
-                  );
-                },
+            : Builder(
+                builder: (innerCtx) => OnboardingScreen(
+                  onComplete: () {
+                    Navigator.of(innerCtx).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => const HomeScreen(),
+                      ),
+                    );
+                  },
+                ),
               ),
         transitionsBuilder: (_, animation, a, child) {
           return FadeTransition(opacity: animation, child: child);

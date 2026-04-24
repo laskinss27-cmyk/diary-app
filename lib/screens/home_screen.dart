@@ -1,25 +1,17 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
-import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:speech_to_text_platform_interface/speech_to_text_platform_interface.dart'
-    show ListenMode;
 import '../main.dart';
 import '../models/diary_entry.dart';
 import '../services/storage_service.dart';
 import '../services/database_service.dart';
-import '../services/gemini_service.dart';
-import '../services/mood_fallback.dart';
-import '../services/lexicon_analyzer.dart';
-import '../services/analysis_mode.dart';
+import 'dart:ui';
 import '../widgets/avatar_picker.dart';
-import '../widgets/entry_card.dart';
+import '../widgets/entry_section.dart';
+import '../widgets/frosted_background.dart';
 import '../widgets/gentle_crisis_dialog.dart';
 import '../widgets/mood_vase.dart';
 import '../widgets/welcome_banner.dart';
 import '../services/update_service.dart';
+import 'entry_screen.dart';
 import 'settings_screen.dart';
 import 'report_screen.dart';
 import 'calendar_screen.dart';
@@ -32,51 +24,18 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> {
   List<DiaryEntry> _entries = [];
-  final TextEditingController _textController = TextEditingController();
-
-  final stt.SpeechToText _speech = stt.SpeechToText();
-  bool _isListening = false;
-  bool _speechAvailable = false;
-  bool _saving = false;
-  bool _isInputOpen = false;
-  String _textBeforeListening = '';
-  bool _restarting = false;
 
   String _userName = '';
   AvatarData _avatar = AvatarData.defaultAvatar;
   WelcomeContext? _welcomeContext;
   late final DateTime _openedAt = DateTime.now();
 
-  // Photo attachments
-  final List<String> _pendingPhotos = [];
-  final ImagePicker _imagePicker = ImagePicker();
-
-  // Animation for mic button
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
-
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    );
-    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-    _initSpeech();
     _loadData();
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    _textController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -140,266 +99,24 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  Future<void> _initSpeech() async {
-    try {
-      _speechAvailable = await _speech.initialize(
-        onStatus: (status) {
-          debugPrint('Speech status: $status');
-          if (status == 'done' && _isListening && !_restarting) {
-            _scheduleRestart();
-          }
-        },
-        onError: (error) {
-          debugPrint('Speech error: ${error.errorMsg}');
-          if (_isListening &&
-              !_restarting &&
-              (error.errorMsg == 'error_speech_timeout' ||
-                  error.errorMsg == 'error_no_match')) {
-            _scheduleRestart();
-            return;
-          }
-          if (error.errorMsg == 'error_busy') return;
-          if (!_isListening) return;
-          setState(() => _isListening = false);
-          _pulseController.stop();
-          _pulseController.reset();
-        },
-      );
-      debugPrint('Speech available: $_speechAvailable');
-    } catch (e) {
-      debugPrint('Speech init exception: $e');
-      _speechAvailable = false;
-    }
-    setState(() {});
-  }
-
-  void _scheduleRestart() {
-    _restarting = true;
-    Future.delayed(const Duration(milliseconds: 400), () {
-      _restarting = false;
-      if (_isListening) _restartListening();
-    });
-  }
-
-  Future<void> _restartListening() async {
-    if (!_isListening) return;
-    _textBeforeListening = _textController.text;
-    try {
-      await _speech.stop();
-      await Future.delayed(const Duration(milliseconds: 150));
-      if (!_isListening) return;
-      await _speech.listen(
-        onResult: _onSpeechResult,
-        localeId: 'ru_RU',
-        listenFor: const Duration(seconds: 120),
-        pauseFor: const Duration(seconds: 60),
-        listenMode: ListenMode.dictation,
-      );
-    } catch (e) {
-      debugPrint('Restart listen error: $e');
-    }
-  }
-
-  void _onSpeechResult(dynamic result) {
-    final newWords = result.recognizedWords as String;
-    if (newWords.isEmpty) return;
-    if (_textBeforeListening.isEmpty) {
-      _textController.text = newWords;
-    } else {
-      _textController.text = '$_textBeforeListening $newWords';
-    }
-    _textController.selection = TextSelection.fromPosition(
-      TextPosition(offset: _textController.text.length),
+  Future<void> _openNewEntry() async {
+    final result = await Navigator.push<DiaryEntry?>(
+      context,
+      MaterialPageRoute(builder: (_) => const EntryScreen()),
     );
-  }
-
-  Future<void> _toggleMic() async {
-    if (_isListening) {
-      _pulseController.stop();
-      _pulseController.reset();
-      setState(() => _isListening = false);
-      try {
-        await _speech.stop();
-      } catch (_) {}
-    } else {
-      if (!_speechAvailable) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Микрофон недоступен')),
-        );
-        return;
-      }
-      _textBeforeListening = _textController.text;
-      setState(() => _isListening = true);
-      _pulseController.repeat(reverse: true);
-      try {
-        await _speech.listen(
-          onResult: _onSpeechResult,
-          localeId: 'ru_RU',
-          listenFor: const Duration(seconds: 120),
-          pauseFor: const Duration(seconds: 30),
-        );
-      } catch (e) {
-        debugPrint('Listen error: $e');
-        _pulseController.stop();
-        _pulseController.reset();
-        setState(() => _isListening = false);
+    if (result != null && mounted) {
+      setState(() => _entries.insert(0, result));
+      if (_isCrisis(result) && mounted) {
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        if (!mounted) return;
+        await GentleCrisisDialog.show(context);
       }
     }
   }
 
-  Future<void> _pickPhoto() async {
-    try {
-      final image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1200,
-        maxHeight: 1200,
-        imageQuality: 80,
-      );
-      if (image == null) return;
-
-      // Copy to app directory for persistence
-      final appDir = await getApplicationDocumentsDirectory();
-      final photosDir = Directory(p.join(appDir.path, 'photos'));
-      if (!photosDir.existsSync()) {
-        photosDir.createSync(recursive: true);
-      }
-
-      final fileName =
-          'photo_${DateTime.now().millisecondsSinceEpoch}${p.extension(image.path)}';
-      final savedPath = p.join(photosDir.path, fileName);
-      await File(image.path).copy(savedPath);
-
-      setState(() => _pendingPhotos.add(savedPath));
-    } catch (e) {
-      debugPrint('Photo pick error: $e');
-    }
-  }
-
-  Future<void> _takePhoto() async {
-    try {
-      final image = await _imagePicker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1200,
-        maxHeight: 1200,
-        imageQuality: 80,
-      );
-      if (image == null) return;
-
-      final appDir = await getApplicationDocumentsDirectory();
-      final photosDir = Directory(p.join(appDir.path, 'photos'));
-      if (!photosDir.existsSync()) {
-        photosDir.createSync(recursive: true);
-      }
-
-      final fileName =
-          'photo_${DateTime.now().millisecondsSinceEpoch}${p.extension(image.path)}';
-      final savedPath = p.join(photosDir.path, fileName);
-      await File(image.path).copy(savedPath);
-
-      setState(() => _pendingPhotos.add(savedPath));
-    } catch (e) {
-      debugPrint('Camera error: $e');
-    }
-  }
-
-  void _removePhoto(int index) {
-    setState(() => _pendingPhotos.removeAt(index));
-  }
-
-  Future<void> _addEntry() async {
-    final text = _textController.text.trim();
-    if (text.isEmpty || _saving) return;
-
-    if (_isListening) {
-      _pulseController.stop();
-      _pulseController.reset();
-      setState(() => _isListening = false);
-      try {
-        await _speech.stop();
-      } catch (_) {}
-    }
-
-    setState(() => _saving = true);
-
-    final mode = await AnalysisModeStore.load();
-    MoodAnalysis analysis;
-
-    switch (mode) {
-      case AnalysisMode.fast:
-        analysis = MoodFallback.analyze(text);
-        break;
-      case AnalysisMode.lexicon:
-        try {
-          analysis = await LexiconAnalyzer.analyze(text);
-        } catch (e) {
-          debugPrint('Lexicon analyzer error: $e');
-          analysis = MoodFallback.analyze(text);
-        }
-        break;
-      case AnalysisMode.ai:
-        // AI with double fallback: lexicon → fast.
-        MoodAnalysis fallback;
-        try {
-          fallback = await LexiconAnalyzer.analyze(text);
-        } catch (_) {
-          fallback = MoodFallback.analyze(text);
-        }
-        analysis = fallback;
-        try {
-          final aiResult = await GeminiService.analyze(text, '');
-          if (aiResult != null) {
-            analysis = aiResult;
-            debugPrint('AI analysis used');
-          } else {
-            debugPrint('AI returned null, using offline fallback');
-          }
-        } catch (e) {
-          debugPrint('AI analysis error: $e');
-        }
-        break;
-    }
-
-    final entry = DiaryEntry(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      text: text,
-      date: DateTime.now(),
-      mood: analysis.emoji,
-      analysis: analysis,
-      photoPaths: List.from(_pendingPhotos),
-    );
-
-    await DatabaseService.insertEntry(entry);
-
-    // Убираем фокус с поля ввода → клавиатура скрывается → снова
-    // видна колба (её анимацию налива иначе пользователь пропустит).
-    if (mounted) FocusScope.of(context).unfocus();
-
-    setState(() {
-      _entries.insert(0, entry);
-      _textController.clear();
-      _pendingPhotos.clear();
-      _saving = false;
-      _isInputOpen = false;
-    });
-
-    // Если анализ обнаружил кризисные маркеры — мягко предложим помощь.
-    // Делаем после setState, чтобы список успел обновиться, и диалог
-    // появился уже поверх нормального состояния UI.
-    if (_isCrisisAnalysis(analysis) && mounted) {
-      // Небольшая задержка, чтобы пользователь успел увидеть, что
-      // его запись сохранилась, и не почувствовал, что диалог —
-      // это "ответ" на написанное.
-      await Future<void>.delayed(const Duration(milliseconds: 600));
-      if (!mounted) return;
-      await GentleCrisisDialog.show(context);
-    }
-  }
-
-  /// Проверяет, содержит ли анализ признаки кризисного состояния.
-  /// Оба анализатора (LexiconAnalyzer и MoodFallback) в этом случае
-  /// помечают запись через keywords ("кризисное состояние",
-  /// "суицидальные мысли", "самоповреждение") и ставят score = 1.
-  bool _isCrisisAnalysis(MoodAnalysis a) {
+  bool _isCrisis(DiaryEntry entry) {
+    final a = entry.analysis;
+    if (a == null) return false;
     if (a.score <= 1) return true;
     for (final k in a.keywords) {
       final low = k.toLowerCase();
@@ -412,20 +129,27 @@ class _HomeScreenState extends State<HomeScreen>
     return false;
   }
 
-  Future<void> _deleteEntry(int index) async {
-    final entry = _entries[index];
-    await DatabaseService.deleteEntry(entry.id);
-    setState(() => _entries.removeAt(index));
+  Future<void> _deleteEntry(String id) async {
+    await DatabaseService.deleteEntry(id);
+    if (!mounted) return;
+    setState(() => _entries.removeWhere((e) => e.id == id));
   }
 
   @override
   Widget build(BuildContext context) {
     final t = DiaryApp.themeNotifier.theme;
+    final grouped = _groupEntries(_entries);
 
     return Scaffold(
-      backgroundColor: t.background,
-      appBar: AppBar(
-        backgroundColor: t.primary,
+      backgroundColor: Colors.transparent,
+      extendBodyBehindAppBar: true,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: AppBar(
+        backgroundColor: t.primary.withValues(alpha: 0.55),
         title: const Text(
           'Дневник',
           style: TextStyle(
@@ -438,7 +162,8 @@ class _HomeScreenState extends State<HomeScreen>
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.favorite_border_rounded, color: Colors.white),
+            icon: const Icon(Icons.favorite_border_rounded,
+                color: Colors.white),
             tooltip: 'Если тебе тяжело',
             onPressed: () => Navigator.push(
               context,
@@ -446,14 +171,15 @@ class _HomeScreenState extends State<HomeScreen>
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.calendar_month_rounded, color: Colors.white),
+            icon:
+                const Icon(Icons.calendar_month_rounded, color: Colors.white),
             tooltip: 'Календарь',
             onPressed: () async {
               await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const CalendarScreen()),
               );
-              _loadData(); // Refresh after calendar
+              _loadData();
             },
           ),
           IconButton(
@@ -479,333 +205,163 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // When the keyboard is up, hide the welcome banner and mood flask
-          // so the input card + a glimpse of recent entries remain visible
-          // and the layout doesn't overflow. User is focused on writing —
-          // decorations are not needed in that moment.
-          if (MediaQuery.of(context).viewInsets.bottom == 0) ...[
-            // Warm welcome banner — animated on cold start, persistent thereafter.
-            if (_welcomeContext != null)
-              WelcomeBanner(
-                userName: _userName,
-                avatar: _avatar,
-                context: _welcomeContext!,
-                now: _openedAt,
-              ),
-            // Mood flask — visual summary of the last N entries.
-            MoodVase(entries: _entries),
-          ],
-          // "Написать" button or expandable input card
-          if (!_isInputOpen)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => setState(() => _isInputOpen = true),
-                  icon: const Icon(Icons.edit_rounded, size: 20),
-                  label: const Text(
-                    'Написать',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: t.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0,
-                  ),
+          ),
+        ),
+      ),
+      body: FrostedBackground(
+        theme: t,
+        child: SafeArea(
+          top: false,
+          child: ListView(
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + kToolbarHeight + 8,
+              bottom: 100,
+            ),
+            children: [
+              if (_welcomeContext != null)
+                WelcomeBanner(
+                  userName: _userName,
+                  avatar: _avatar,
+                  context: _welcomeContext!,
+                  now: _openedAt,
                 ),
-              ),
-            )
-          else
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: t.cardColor,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: t.cardShadow.withValues(alpha: 0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              MoodVase(entries: _entries),
+              const SizedBox(height: 8),
+              if (_entries.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Column(
                     children: [
+                      Text(t.emoji, style: const TextStyle(fontSize: 48)),
+                      const SizedBox(height: 12),
                       Text(
-                        'Как прошёл твой день?',
-                        style: TextStyle(
-                          color: t.textSecondary,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 14,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          if (_textController.text.trim().isEmpty &&
-                              _pendingPhotos.isEmpty) {
-                            setState(() => _isInputOpen = false);
-                            FocusScope.of(context).unfocus();
-                          }
-                        },
-                        child: Icon(
-                          Icons.close_rounded,
-                          size: 20,
-                          color: t.textHint,
-                        ),
+                        'Здесь появятся твои записи',
+                        style: TextStyle(color: t.textHint, fontSize: 15),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _textController,
-                    maxLines: 4,
-                    autofocus: true,
-                    style: TextStyle(color: t.textPrimary),
-                    decoration: InputDecoration(
-                      hintText: 'Напиши или надиктуй запись...',
-                      hintStyle:
-                          TextStyle(color: t.textHint.withValues(alpha: 0.5)),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            BorderSide(color: t.primary.withValues(alpha: 0.2)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            BorderSide(color: t.primary.withValues(alpha: 0.2)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: t.primary),
-                      ),
-                      filled: true,
-                      fillColor: t.brightness == Brightness.dark
-                          ? t.background
-                          : t.background.withValues(alpha: 0.5),
-                    ),
+                )
+              else ...[
+                if (grouped.today.isNotEmpty)
+                  EntrySection(
+                    title: 'Сегодня',
+                    entries: grouped.today,
+                    onDelete: _deleteEntry,
                   ),
-                  if (_pendingPhotos.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 72,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _pendingPhotos.length,
-                        itemBuilder: (context, i) {
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: Stack(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: Image.file(
-                                    File(_pendingPhotos[i]),
-                                    width: 72,
-                                    height: 72,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                                Positioned(
-                                  top: 2,
-                                  right: 2,
-                                  child: GestureDetector(
-                                    onTap: () => _removePhoto(i),
-                                    child: Container(
-                                      width: 22,
-                                      height: 22,
-                                      decoration: BoxDecoration(
-                                        color: Colors.black54,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(Icons.close,
-                                          color: Colors.white, size: 14),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                if (grouped.yesterday.isNotEmpty)
+                  EntrySection(
+                    title: 'Вчера',
+                    entries: grouped.yesterday,
+                    onDelete: _deleteEntry,
+                  ),
+                if (grouped.earlier.isNotEmpty)
+                  EntrySection(
+                    title: 'Ранее',
+                    entries: grouped.earlier,
+                    onDelete: _deleteEntry,
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      floatingActionButton: _WriteButton(onPressed: _openNewEntry, theme: t),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+    );
+  }
+
+  _GroupedEntries _groupEntries(List<DiaryEntry> entries) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    final List<DiaryEntry> t = [];
+    final List<DiaryEntry> y = [];
+    final List<DiaryEntry> e = [];
+    for (final entry in entries) {
+      final d = DateTime(entry.date.year, entry.date.month, entry.date.day);
+      if (d == today) {
+        t.add(entry);
+      } else if (d == yesterday) {
+        y.add(entry);
+      } else {
+        e.add(entry);
+      }
+    }
+    return _GroupedEntries(today: t, yesterday: y, earlier: e);
+  }
+}
+
+class _GroupedEntries {
+  final List<DiaryEntry> today;
+  final List<DiaryEntry> yesterday;
+  final List<DiaryEntry> earlier;
+  _GroupedEntries({
+    required this.today,
+    required this.yesterday,
+    required this.earlier,
+  });
+}
+
+class _WriteButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  final dynamic theme;
+  const _WriteButton({required this.onPressed, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    final p = t.primary as Color;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: SizedBox(
+        width: double.infinity,
+        height: 58,
+        child: Material(
+          color: Colors.transparent,
+          shadowColor: p.withValues(alpha: 0.55),
+          elevation: 10,
+          borderRadius: BorderRadius.circular(29),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(29),
+            onTap: onPressed,
+            child: Ink(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color.lerp(p, Colors.white, 0.18)!,
+                    p,
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(29),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.35),
+                  width: 1,
+                ),
+              ),
+              child: const Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.edit_rounded, size: 22, color: Colors.white),
+                    SizedBox(width: 10),
+                    Text(
+                      'Написать',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
                       ),
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  AnimatedBuilder(
-                    animation: _pulseAnimation,
-                    builder: (context, _) {
-                      if (_isListening) {
-                        return _buildRecordingRow(t);
-                      }
-                      return _buildNormalRow(t);
-                    },
-                  ),
-                ],
+                ),
               ),
             ),
-          // Entries list
-          Expanded(
-            child: _entries.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(DiaryApp.themeNotifier.theme.emoji,
-                            style: const TextStyle(fontSize: 48)),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Здесь появятся твои записи',
-                          style: TextStyle(
-                            color: t.textHint,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _entries.length,
-                    itemBuilder: (context, index) {
-                      return EntryCard(
-                        entry: _entries[index],
-                        onDelete: () => _deleteEntry(index),
-                      );
-                    },
-                  ),
           ),
-        ],
+        ),
       ),
-    );
-  }
-
-  Widget _buildNormalRow(dynamic t) {
-    return Row(
-      children: [
-        GestureDetector(
-          onTap: _toggleMic,
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: t.primary,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.mic_none, color: Colors.white, size: 22),
-          ),
-        ),
-        const SizedBox(width: 6),
-        // Photo buttons
-        GestureDetector(
-          onTap: _pickPhoto,
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: (t.primary as Color).withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.photo_library_rounded,
-                color: t.primary, size: 20),
-          ),
-        ),
-        const SizedBox(width: 6),
-        GestureDetector(
-          onTap: _takePhoto,
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: (t.primary as Color).withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child:
-                Icon(Icons.camera_alt_rounded, color: t.primary, size: 20),
-          ),
-        ),
-        const Spacer(),
-        _buildSaveButton(t),
-      ],
-    );
-  }
-
-  Widget _buildRecordingRow(dynamic t) {
-    return Row(
-      children: [
-        ScaleTransition(
-          scale: _pulseAnimation,
-          child: GestureDetector(
-            onTap: _toggleMic,
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.red.withValues(alpha: 0.4),
-                    blurRadius: 16,
-                    spreadRadius: 3,
-                  ),
-                ],
-              ),
-              child: const Icon(Icons.stop_rounded,
-                  color: Colors.white, size: 24),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            'Запись... Нажми СТОП',
-            style: TextStyle(
-              color: Colors.red,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        ),
-        _buildSaveButton(t),
-      ],
-    );
-  }
-
-  Widget _buildSaveButton(dynamic t) {
-    return ElevatedButton(
-      onPressed: _saving ? null : _addEntry,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: t.primary as Color,
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      ),
-      child: _saving
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-          : const Text('Сохранить'),
     );
   }
 }
