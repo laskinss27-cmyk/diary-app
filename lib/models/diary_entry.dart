@@ -1,31 +1,55 @@
 import 'dart:convert';
 
+/// Where the analysis came from. Used by the reanalysis service to decide
+/// whether an entry should be re-evaluated by the AI when the network comes
+/// back online.
+enum AnalysisSource { fast, lexicon, ai }
+
 class MoodAnalysis {
   final String emoji;
   final int score;
   final List<String> keywords;
   final String brief;
+  final AnalysisSource source;
 
   const MoodAnalysis({
     required this.emoji,
     required this.score,
     required this.keywords,
     required this.brief,
+    this.source = AnalysisSource.lexicon,
   });
+
+  MoodAnalysis copyWith({AnalysisSource? source}) => MoodAnalysis(
+        emoji: emoji,
+        score: score,
+        keywords: keywords,
+        brief: brief,
+        source: source ?? this.source,
+      );
 
   Map<String, dynamic> toJson() => {
         'emoji': emoji,
         'score': score,
         'keywords': keywords,
         'brief': brief,
+        'source': source.name,
       };
 
-  factory MoodAnalysis.fromJson(Map<String, dynamic> json) => MoodAnalysis(
-        emoji: json['emoji'] as String,
-        score: json['score'] as int,
-        keywords: List<String>.from(json['keywords'] as List),
-        brief: json['brief'] as String,
-      );
+  factory MoodAnalysis.fromJson(Map<String, dynamic> json) {
+    final srcRaw = json['source'] as String?;
+    final src = AnalysisSource.values.firstWhere(
+      (e) => e.name == srcRaw,
+      orElse: () => AnalysisSource.lexicon,
+    );
+    return MoodAnalysis(
+      emoji: json['emoji'] as String,
+      score: json['score'] as int,
+      keywords: List<String>.from(json['keywords'] as List),
+      brief: json['brief'] as String,
+      source: src,
+    );
+  }
 }
 
 class DiaryEntry {
@@ -49,11 +73,12 @@ class DiaryEntry {
     MoodAnalysis? analysis,
     String? mood,
     List<String>? photoPaths,
+    DateTime? date,
   }) =>
       DiaryEntry(
         id: id,
         text: text,
-        date: date,
+        date: date ?? this.date,
         mood: mood ?? this.mood,
         analysis: analysis ?? this.analysis,
         photoPaths: photoPaths ?? this.photoPaths,

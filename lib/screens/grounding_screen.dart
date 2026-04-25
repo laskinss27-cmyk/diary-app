@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../main.dart';
+import '../services/achievements_service.dart';
+import '../widgets/achievement_unlock_dialog.dart';
 
 /// Техника заземления 5-4-3-2-1.
 ///
@@ -65,11 +67,17 @@ class _GroundingScreenState extends State<GroundingScreen> {
     ),
   ];
 
-  void _next() {
+  void _next() async {
     if (_step < _steps.length - 1) {
       setState(() => _step++);
     } else {
       setState(() => _step = _steps.length);
+      final unlocked = await AchievementsChecker.checkAfterGrounding();
+      if (unlocked.isNotEmpty && mounted) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        if (!mounted) return;
+        await AchievementUnlockDialog.showQueue(context, unlocked);
+      }
     }
   }
 

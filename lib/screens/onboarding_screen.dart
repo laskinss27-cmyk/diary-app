@@ -104,9 +104,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     await StorageService.saveThemeId(_selectedThemeId);
     await StorageService.setOnboarded();
 
-    // Set up notifications
+    // Set up notifications. Wrapped in try/catch so a permission denial or
+    // a flaky platform-channel error here can never block the user from
+    // entering the app — the "Начать" button MUST always advance.
     if (_notifEnabled) {
-      await NotificationService.scheduleDaily(_notifHour, _notifMinute);
+      try {
+        await NotificationService.requestPermissions();
+        await NotificationService.scheduleDaily(_notifHour, _notifMinute);
+      } catch (_) {
+        // User can re-enable from Settings later.
+      }
     }
 
     widget.onComplete();

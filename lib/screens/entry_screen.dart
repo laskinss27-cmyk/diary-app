@@ -209,26 +209,33 @@ class _EntryScreenState extends State<EntryScreen>
 
     switch (mode) {
       case AnalysisMode.fast:
-        analysis = MoodFallback.analyze(text);
+        analysis = MoodFallback.analyze(text)
+            .copyWith(source: AnalysisSource.fast);
         break;
       case AnalysisMode.lexicon:
         try {
-          analysis = await LexiconAnalyzer.analyze(text);
+          analysis = (await LexiconAnalyzer.analyze(text))
+              .copyWith(source: AnalysisSource.lexicon);
         } catch (_) {
-          analysis = MoodFallback.analyze(text);
+          analysis = MoodFallback.analyze(text)
+              .copyWith(source: AnalysisSource.fast);
         }
         break;
       case AnalysisMode.ai:
         MoodAnalysis fallback;
         try {
-          fallback = await LexiconAnalyzer.analyze(text);
+          fallback = (await LexiconAnalyzer.analyze(text))
+              .copyWith(source: AnalysisSource.lexicon);
         } catch (_) {
-          fallback = MoodFallback.analyze(text);
+          fallback = MoodFallback.analyze(text)
+              .copyWith(source: AnalysisSource.fast);
         }
         analysis = fallback;
         try {
           final aiResult = await GeminiService.analyze(text, '');
-          if (aiResult != null) analysis = aiResult;
+          if (aiResult != null) {
+            analysis = aiResult.copyWith(source: AnalysisSource.ai);
+          }
         } catch (_) {}
         break;
     }

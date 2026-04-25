@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../main.dart';
 import '../models/diary_entry.dart';
+import '../services/achievements_service.dart';
 import '../services/storage_service.dart';
 import '../services/database_service.dart';
+import '../widgets/achievement_unlock_dialog.dart';
 import 'dart:ui';
 import '../widgets/avatar_picker.dart';
 import '../widgets/entry_section.dart';
@@ -106,10 +108,17 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (result != null && mounted) {
       setState(() => _entries.insert(0, result));
+      final unlocked =
+          await AchievementsChecker.checkAfterEntry(result, _entries);
       if (_isCrisis(result) && mounted) {
         await Future<void>.delayed(const Duration(milliseconds: 600));
         if (!mounted) return;
         await GentleCrisisDialog.show(context);
+      }
+      if (unlocked.isNotEmpty && mounted) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        if (!mounted) return;
+        await AchievementUnlockDialog.showQueue(context, unlocked);
       }
     }
   }

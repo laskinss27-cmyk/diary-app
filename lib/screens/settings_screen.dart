@@ -1,3 +1,4 @@
+import 'package:app_settings/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import '../main.dart';
@@ -10,6 +11,7 @@ import '../services/analysis_mode.dart';
 import '../widgets/avatar_picker.dart';
 import '../widgets/city_autocomplete.dart';
 import '../widgets/disclaimer_dialog.dart';
+import 'achievements_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -220,11 +222,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _toggleNotifications(bool enabled) async {
     if (enabled) {
+      final perm = await NotificationService.requestPermissions();
+      if (!perm.notificationsGranted) {
+        if (mounted) _showPermissionDeniedDialog();
+        return;
+      }
       await NotificationService.scheduleDaily(_notifHour, _notifMinute);
+      if (!perm.exactAlarmGranted && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Точное время не разрешено — напоминание может приходить с задержкой',
+            ),
+            backgroundColor: t.accent,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     } else {
       await NotificationService.cancel();
     }
     setState(() => _notifEnabled = enabled);
+  }
+
+  void _showPermissionDeniedDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: t.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Нужно разрешение',
+            style:
+                TextStyle(color: t.textPrimary, fontWeight: FontWeight.w700)),
+        content: Text(
+          'Чтобы напоминания приходили, разреши уведомления в настройках приложения.',
+          style: TextStyle(color: t.textSecondary, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Отмена', style: TextStyle(color: t.textHint)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              AppSettings.openAppSettings(type: AppSettingsType.notification);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: t.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text('Открыть настройки'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _pickNotifTime() async {
@@ -653,6 +708,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               if (_notifEnabled) ...[
                 const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: t.accent.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: t.accent.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded,
+                              size: 18, color: t.accent),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Если напоминания не приходят',
+                              style: TextStyle(
+                                color: t.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'На Xiaomi/Redmi и подобных:\n'
+                        '• Разреши автозапуск приложения\n'
+                        '• Сними ограничения батареи (нет ограничений)\n'
+                        '• Разреши уведомления и точные будильники',
+                        style: TextStyle(
+                          color: t.textSecondary,
+                          fontSize: 11.5,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          _hintButton(
+                            'Уведомления',
+                            Icons.notifications_outlined,
+                            () => AppSettings.openAppSettings(
+                                type: AppSettingsType.notification),
+                          ),
+                          _hintButton(
+                            'Батарея',
+                            Icons.battery_saver_outlined,
+                            () => AppSettings.openAppSettings(
+                                type: AppSettingsType.batteryOptimization),
+                          ),
+                          _hintButton(
+                            'Все настройки',
+                            Icons.settings_outlined,
+                            () => AppSettings.openAppSettings(),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
                 InkWell(
                   onTap: _pickNotifTime,
                   borderRadius: BorderRadius.circular(12),
@@ -803,6 +927,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            // --- Мои достижения ---
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AchievementsScreen(),
+                  ),
+                ),
+                icon: Icon(Icons.emoji_events_outlined,
+                    color: t.primary, size: 20),
+                label: Text(
+                  'Мои достижения',
+                  style: TextStyle(
+                    color: t.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: t.primary.withValues(alpha: 0.3)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -877,6 +1029,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _hintButton(String label, IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: t.cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: t.accent.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: t.accent),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: t.textSecondary,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
