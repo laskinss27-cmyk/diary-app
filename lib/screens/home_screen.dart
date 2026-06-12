@@ -10,7 +10,7 @@ import '../widgets/avatar_picker.dart';
 import '../widgets/entry_section.dart';
 import '../widgets/frosted_background.dart';
 import '../widgets/gentle_crisis_dialog.dart';
-import '../widgets/mood_vase.dart';
+import '../widgets/mood_sky.dart';
 import '../widgets/welcome_banner.dart';
 import '../services/update_service.dart';
 import 'entry_screen.dart';
@@ -243,7 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   context: _welcomeContext!,
                   now: _openedAt,
                 ),
-              MoodVase(entries: _entries),
+              MoodSky(entries: _entries),
               const SizedBox(height: 8),
               if (_entries.isEmpty)
                 Padding(
