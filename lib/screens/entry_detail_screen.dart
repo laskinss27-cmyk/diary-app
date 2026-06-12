@@ -47,7 +47,7 @@ class EntryDetailScreen extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  MoodBadge(score: score, size: 44),
+                  MoodBadge(score: score, size: 44, emoji: entry.mood),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(

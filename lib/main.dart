@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'models/app_theme.dart';
 import 'services/storage_service.dart';
+import 'services/local_llm_service.dart';
 import 'services/notification_service.dart';
 import 'services/reanalysis_service.dart';
 import 'screens/splash_screen.dart';
@@ -16,6 +19,15 @@ void main() async {
   FlutterNativeSplash.preserve(widgetsBinding: binding);
 
   await initializeDateFormatting('ru_RU', null);
+  // Local LLM plugin must be initialized before any model manager call.
+  // If it fails, the app still works — analysis falls back to the lexicon.
+  try {
+    await FlutterGemma.initialize(
+      huggingFaceToken: await LocalLlmService.loadToken(),
+    );
+  } catch (e) {
+    debugPrint('FlutterGemma init failed: $e');
+  }
   await NotificationService.init();
   await StorageService.migrateIfNeeded();
   // Re-arm any saved reminder schedule after install/reboot/MIUI kill.
@@ -111,6 +123,7 @@ class _DiaryAppState extends State<DiaryApp> with WidgetsBindingObserver {
             ),
             scaffoldBackgroundColor: t.background,
             useMaterial3: true,
+            fontFamily: 'Nunito',
           ),
           home: const SplashScreen(),
         );

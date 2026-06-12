@@ -24,4 +24,8 @@ class Secrets {
 
   /// Название модели.
   static const String defaultModel = '';
+
+  /// HuggingFace-токен (read) для скачивания модели локального ИИ.
+  /// На аккаунте токена должна быть принята лицензия Gemma.
+  static const String defaultHfToken = '';
 }

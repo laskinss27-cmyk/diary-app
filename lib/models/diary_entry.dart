@@ -3,7 +3,7 @@ import 'dart:convert';
 /// Where the analysis came from. Used by the reanalysis service to decide
 /// whether an entry should be re-evaluated by the AI when the network comes
 /// back online.
-enum AnalysisSource { fast, lexicon, ai }
+enum AnalysisSource { fast, lexicon, ai, local }
 
 class MoodAnalysis {
   final String emoji;

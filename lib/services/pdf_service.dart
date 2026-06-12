@@ -65,11 +65,13 @@ class PdfService {
         build: (context) {
           return entries.map((entry) {
             final score = entry.analysis?.score ?? 5;
+            // Single rose hue, saturation follows the score — no
+            // traffic-light grading even in the exported report.
             final scoreColor = score >= 7
-                ? PdfColors.green
+                ? PdfColor.fromHex('C44569')
                 : score >= 4
-                    ? PdfColors.amber
-                    : PdfColors.red;
+                    ? PdfColor.fromHex('D98BA3')
+                    : PdfColor.fromHex('9E8B92');
 
             return pw.Container(
               margin: const pw.EdgeInsets.only(bottom: 16),

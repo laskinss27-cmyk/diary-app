@@ -89,6 +89,66 @@ class LexiconAnalyzer {
     'немного', 'чуть', 'слегка', 'отчасти', 'едва', 'почти',
   };
 
+  // ---- Colloquial / slang / mat overrides ----
+  // RuSentiLex is academic Russian and misses everyday speech: mat, slang,
+  // interjections, internet shorthand. We add a layer on top.
+  // Weight 1=fact, 2=opinion, 3=feeling — same convention as RuSentiLex.
+  // These take priority over RuSentiLex (checked first; if matched here,
+  // single-word lookup is replaced).
+  static const _colloquialPos = <String, int>{
+    // Interjections of joy / excitement
+    'ух': 2, 'вау': 2, 'ого': 1, 'охуенн': 3, 'збс': 3, 'збсь': 3,
+    'кайф': 3, 'кайфов': 3, 'кайфую': 3, 'кайфану': 3,
+    'топчик': 3, 'топ': 2, 'огонь': 3, 'пушка': 3, 'бомба': 2,
+    'круто': 3, 'клас': 3, 'кле': 2, 'агон': 2, 'офиге': 2, 'афиге': 2,
+    // Internet / Gen-Z slang
+    'имба': 2, 'годнот': 3, 'годно': 2, 'четко': 2, 'четенько': 2,
+    'кайфан': 3, 'красав': 2, 'красавчик': 2, 'молодец': 3,
+    'респек': 2, 'респект': 2, 'лайк': 2,
+    // Anticipation / wanting (mild positive — engagement with life)
+    'хочется': 1, 'захотелось': 1, 'мечта': 2, 'мечтаю': 2,
+    'необычн': 1, 'нов': 1, 'интересн': 2, 'любопытн': 2,
+    // Approval
+    'нравится': 3, 'понравилось': 3, 'улыбнул': 2, 'обрадова': 3,
+  };
+
+  static const _colloquialNeg = <String, int>{
+    // Mat / strong colloquial negatives
+    'заеба': 3, 'заебало': 3, 'заебал': 3, 'заебись_neg': 0, // exclude trap
+    'задолба': 3, 'задолбал': 3, 'задолбало': 3,
+    'доеба': 3, 'доебал': 3, 'доебало': 3, 'наеба': 2,
+    'бес': 0, // stem clash, handled below
+    'бесит': 3, 'бесят': 3, 'взбес': 3, 'выбес': 3,
+    'хуев': 2, 'хуёв': 2, 'хуйн': 2, 'хуёво': 3, 'хуево': 3,
+    'хрен': 2, 'хренов': 2, 'хренот': 2, 'фигн': 2, 'фигов': 2,
+    'дерьм': 3, 'говн': 3, 'говнищ': 3, 'парашн': 3, 'парашка': 3,
+    'отстой': 2, 'отстойн': 2, 'лажа': 2, 'лажов': 2,
+    'жесть': 2, 'жест': 2, 'трэш': 2, 'треш': 2,
+    // Fatigue / burnout colloquial
+    'выгор': 3, 'выгорел': 3, 'вымота': 3, 'выжат': 3,
+    'устал': 3, 'устала': 3, 'устало': 2, 'усталость': 3,
+    'разбит': 2, 'выжатый': 3, 'опустошен': 3,
+    // Failure / mistake verbs
+    'проспа': 2, 'проспал': 2, 'облажа': 3, 'облажал': 3,
+    'запорол': 2, 'запоро': 2, 'обосра': 3, 'обосрал': 3,
+    'пролета': 2, 'пролетел': 2, 'упусти': 2, 'просра': 3,
+    // Annoyance interjections
+    'блять': 2, 'блядь': 2, 'сук': 1, 'нахер': 2, 'нахуй': 2,
+    'пиздец_neg': 0, // intensifier — already handled
+    // Anxiety / unease colloquial
+    'тревожн': 3, 'панику': 3, 'паникую': 3, 'трясет': 2, 'трясёт': 2,
+    'мутно': 2, 'муторно': 3, 'тошно': 3, 'погано': 3, 'паршив': 3,
+    'хреново': 3, 'фигово': 3, 'плохо': 3, 'грустн': 3,
+  };
+
+  /// Stems we explicitly exclude from RuSentiLex matching because they cause
+  /// homonym false positives in colloquial speech.
+  static const _excludeStems = {
+    'блин',  // pancake (pos) vs mild expletive (more common in diary text)
+    'так',   // "так" matched as confirmation
+    'да',    // already a stopword but RuSentiLex may have it
+  };
+
   static const _stopwords = {
     'просто', 'вообще', 'вот', 'ну', 'да', 'же', 'только',
     'уже', 'тут', 'там', 'сам', 'себе', 'как', 'так',
@@ -207,8 +267,35 @@ class LexiconAnalyzer {
       final inSkeptic = skepticIdx.contains(i);
 
       // Check single-word lexicon.
-      final pw = _pos![stem];
-      final nw = _neg![stem];
+      // Colloquial overrides take FULL priority: if a stem matches anything
+      // in either colloquial map, RuSentiLex is skipped for this stem
+      // (otherwise we'd double-count and the wrong polarity could win
+      // because of the diminishing factor on the second hit).
+      int? pw;
+      int? nw;
+      bool colloquialHit = false;
+      for (final entry in _colloquialPos.entries) {
+        if (entry.value == 0) continue;
+        if (stem.startsWith(entry.key) || entry.key.startsWith(stem)) {
+          pw = entry.value;
+          colloquialHit = true;
+          break;
+        }
+      }
+      for (final entry in _colloquialNeg.entries) {
+        if (entry.value == 0) continue;
+        if (stem.startsWith(entry.key) || entry.key.startsWith(stem)) {
+          nw = entry.value;
+          colloquialHit = true;
+          break;
+        }
+      }
+      // Fall back to RuSentiLex only if no colloquial override matched
+      // and the stem is not explicitly excluded.
+      if (!colloquialHit && !_excludeStems.contains(stem)) {
+        pw = _pos![stem];
+        nw = _neg![stem];
+      }
 
       if (pw != null) {
         // Bump count for this stem.

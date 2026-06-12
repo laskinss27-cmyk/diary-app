@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:app_settings/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -8,6 +9,8 @@ import '../services/notification_service.dart';
 import '../services/pdf_service.dart';
 import '../services/gemini_service.dart';
 import '../services/analysis_mode.dart';
+import '../services/local_llm_service.dart';
+import '../services/reanalysis_service.dart';
 import '../widgets/avatar_picker.dart';
 import '../widgets/city_autocomplete.dart';
 import '../widgets/disclaimer_dialog.dart';
@@ -44,6 +47,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Analysis mode
   AnalysisMode _analysisMode = AnalysisMode.lexicon;
 
+  // Local LLM model
+  final _hfTokenController = TextEditingController();
+  bool _modelReady = false;
+  bool _modelDownloading = false;
+  double _modelProgress = 0;
+  String? _modelError;
+  bool _llmUseGpu = false;
+
   @override
   void initState() {
     super.initState();
@@ -62,8 +73,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final notifSettings = await NotificationService.getSettings();
     final apiConfig = await ApiConfig.load();
     final mode = await AnalysisModeStore.load();
+    final modelReady = await LocalLlmService.isModelReady();
+    final hfToken = await LocalLlmService.loadToken();
+    final llmUseGpu = await LocalLlmService.useGpu();
 
     setState(() {
+      _modelReady = modelReady;
+      _llmUseGpu = llmUseGpu;
+      if (hfToken != null) _hfTokenController.text = hfToken;
       _avatar = avatar;
       _notifEnabled = notifSettings.enabled;
       _notifHour = notifSettings.hour;
@@ -89,6 +106,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _downloadModel() async {
+    final token = _hfTokenController.text.trim();
+    if (token.isNotEmpty) await LocalLlmService.saveToken(token);
+    setState(() {
+      _modelDownloading = true;
+      _modelProgress = 0;
+      _modelError = null;
+    });
+    double lastShown = 0;
+    final err = await LocalLlmService.downloadModel(
+      onProgress: (p) {
+        // Re-render at most every 0.5% — chunks arrive thousands per minute.
+        if (p - lastShown >= 0.005 && mounted) {
+          lastShown = p;
+          setState(() => _modelProgress = p);
+        }
+      },
+    );
+    if (!mounted) return;
+    final ready = await LocalLlmService.isModelReady();
+    if (!mounted) return;
+    setState(() {
+      _modelDownloading = false;
+      _modelError = err;
+      _modelReady = ready;
+    });
+    if (err == null && ready) {
+      // Start working through old offline-analyzed entries right away.
+      unawaited(ReanalysisService.tryRun(force: true));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Модель скачана — локальный анализ доступен'),
+          backgroundColor: t.primary,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteModel() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Удалить модель?'),
+        content: const Text(
+            'Локальный анализ перестанет работать, пока не скачаешь её снова (~3 ГБ).'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await LocalLlmService.deleteModel();
+    if (!mounted) return;
+    setState(() => _modelReady = false);
   }
 
   String _detectPreset(ApiConfig config) {
@@ -128,12 +209,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (preset == null) return;
     setState(() {
       _selectedPreset = presetId;
+      // Always overwrite all three fields so the chip is predictable —
+      // tapping "Встроенный" restores the embedded values even after the
+      // user has cleared or edited them.
       _apiUrlController.text = preset.baseUrl;
-      if (preset.apiKey.isNotEmpty) {
-        _apiKeyController.text = preset.apiKey;
-      } else if (presetId != 'builtin') {
-        _apiKeyController.text = '';
-      }
+      _apiKeyController.text = preset.apiKey;
       _apiModelController.text = preset.model;
       _testResult = null;
     });
@@ -379,6 +459,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _apiUrlController.dispose();
     _apiKeyController.dispose();
     _apiModelController.dispose();
+    _hfTokenController.dispose();
     super.dispose();
   }
 
@@ -486,7 +567,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 12),
               for (final mode in AnalysisMode.values) ...[
                 _modeOption(mode),
-                if (mode != AnalysisMode.ai) const SizedBox(height: 8),
+                if (mode != AnalysisMode.values.last)
+                  const SizedBox(height: 8),
               ],
               const SizedBox(height: 10),
               Container(
@@ -510,6 +592,140 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
               ),
+            ]),
+            const SizedBox(height: 16),
+
+            // --- Local LLM model ---
+            _card(children: [
+              Row(
+                children: [
+                  Icon(Icons.memory_rounded, color: t.primary, size: 22),
+                  const SizedBox(width: 8),
+                  Text('Модель локального ИИ',
+                      style: TextStyle(
+                          color: t.textSecondary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              if (_modelReady) ...[
+                Row(
+                  children: [
+                    Icon(Icons.check_circle, color: t.primary, size: 18),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Gemma 3n E2B скачана (2.92 ГБ). '
+                        'Анализ работает прямо на телефоне.',
+                        style: TextStyle(
+                            color: t.textSecondary, fontSize: 12, height: 1.4),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Ускорение на GPU (экспериментально)',
+                            style: TextStyle(
+                                color: t.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600),
+                          ),
+                          Text(
+                            'На некоторых телефонах может зависнуть — тогда перезагрузи и выключи',
+                            style:
+                                TextStyle(color: t.textHint, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: _llmUseGpu,
+                      onChanged: (v) async {
+                        setState(() => _llmUseGpu = v);
+                        await LocalLlmService.setUseGpu(v);
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _deleteModel,
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Удалить модель'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: t.textHint,
+                      side: BorderSide(
+                          color: t.textHint.withValues(alpha: 0.4)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ] else ...[
+                Text(
+                  'Gemma 3n E2B (~3 ГБ) анализирует записи прямо на телефоне — текст никуда не отправляется. Скачивай по Wi-Fi. Нужен токен HuggingFace с принятой лицензией Gemma.',
+                  style:
+                      TextStyle(color: t.textHint, fontSize: 12, height: 1.4),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _hfTokenController,
+                  enabled: !_modelDownloading,
+                  decoration: _inputDecoration('Токен HuggingFace (hf_...)'),
+                  style: TextStyle(color: t.textPrimary, fontSize: 13),
+                ),
+                const SizedBox(height: 10),
+                if (_modelDownloading) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: _modelProgress > 0 ? _modelProgress : null,
+                      minHeight: 8,
+                      backgroundColor: t.primary.withValues(alpha: 0.12),
+                      valueColor: AlwaysStoppedAnimation(t.primary),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Скачивание: ${(_modelProgress * 100).toStringAsFixed(1)}%'
+                    ' — можно свернуть настройки, но не закрывай приложение',
+                    style: TextStyle(color: t.textHint, fontSize: 11),
+                  ),
+                ] else
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _downloadModel,
+                      icon: const Icon(Icons.download_rounded, size: 18),
+                      label: const Text('Скачать модель (~3 ГБ)'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: t.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+              ],
+              if (_modelError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _modelError!,
+                  style: TextStyle(color: t.accent, fontSize: 12),
+                ),
+              ],
             ]),
             const SizedBox(height: 16),
 
@@ -967,6 +1183,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       AnalysisMode.fast => Icons.flash_on_rounded,
       AnalysisMode.lexicon => Icons.menu_book_rounded,
       AnalysisMode.ai => Icons.auto_awesome_rounded,
+      AnalysisMode.local => Icons.memory_rounded,
     };
     return GestureDetector(
       onTap: () => _setAnalysisMode(mode),

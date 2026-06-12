@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../main.dart';
+import '../models/app_theme.dart';
 import '../models/diary_entry.dart';
+import 'mood_face.dart';
 
 class EntryCard extends StatelessWidget {
   final DiaryEntry entry;
@@ -14,11 +16,7 @@ class EntryCard extends StatelessWidget {
     final t = DiaryApp.themeNotifier.theme;
 
     final score = entry.analysis?.score ?? 5;
-    final stripeColor = score >= 7
-        ? const Color(0xFF4CAF50)
-        : score >= 4
-            ? const Color(0xFFFFC107)
-            : const Color(0xFFE94560);
+    final stripeColor = t.moodColor(score);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -49,8 +47,7 @@ class EntryCard extends StatelessWidget {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(entry.mood,
-                              style: const TextStyle(fontSize: 28)),
+                          MoodFace(emoji: entry.mood, score: score, size: 42),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -128,7 +125,7 @@ class EntryCard extends StatelessWidget {
                             children: [
                               Row(
                                 children: [
-                                  _scoreBadge(entry.analysis!.score),
+                                  _scoreBadge(t, entry.analysis!.score),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
@@ -178,22 +175,21 @@ class EntryCard extends StatelessWidget {
     );
   }
 
-  Widget _scoreBadge(int score) {
-    final color = score >= 7
-        ? const Color(0xFF4CAF50)
-        : score >= 4
-            ? const Color(0xFFFFC107)
-            : const Color(0xFFE94560);
+  Widget _scoreBadge(AppThemeData t, int score) {
+    final color = t.moodColor(score);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
+        color: color.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        '$score/10',
+        AppThemeData.moodLabel(score),
         style: TextStyle(
-            color: color, fontSize: 12, fontWeight: FontWeight.w600),
+          color: Color.lerp(color, t.textPrimary, 0.35),
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

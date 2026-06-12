@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../main.dart';
 import '../models/diary_entry.dart';
@@ -34,9 +35,9 @@ class MoodVase extends StatelessWidget {
       case VaseState.empty:
         return 'Твоё состояние';
       case VaseState.dried:
-        return 'Цветы засохли';
+        return 'Цветам нужна вода';
       case VaseState.wilting:
-        return 'Цветы увядают';
+        return 'Цветы поникли';
       case VaseState.alive:
         return 'Цветы живые';
       case VaseState.fresh:
@@ -64,62 +65,76 @@ class MoodVase extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = DiaryApp.themeNotifier.theme;
     final state = computeVaseState(entries, capacity);
+    final isDark = t.brightness == Brightness.dark;
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      padding: const EdgeInsets.fromLTRB(16, 14, 18, 14),
-      decoration: BoxDecoration(
-        color: t.cardColor,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: t.cardShadow.withValues(alpha: 0.25),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 72,
-            height: 108,
-            child: CustomPaint(
-              painter: _VasePainter(
-                state: state,
-                isDark: t.brightness == Brightness.dark,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 18, 14),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: isDark ? 0.08 : 0.42),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: isDark ? 0.12 : 0.55),
+                width: 1,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: t.cardShadow.withValues(alpha: 0.10),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  _title(state),
-                  style: TextStyle(
-                    color: t.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    height: 1.2,
+                SizedBox(
+                  width: 84,
+                  height: 124,
+                  child: CustomPaint(
+                    painter: _VasePainter(
+                      state: state,
+                      isDark: isDark,
+                      tint: t.primary,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  _subtitle(state),
-                  style: TextStyle(
-                    color: t.textSecondary,
-                    fontSize: 12,
-                    height: 1.35,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _title(state),
+                        style: TextStyle(
+                          color: t.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _subtitle(state),
+                        style: TextStyle(
+                          color: t.textSecondary,
+                          fontSize: 12,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -127,16 +142,18 @@ class MoodVase extends StatelessWidget {
 
 class _Stem {
   final Offset base;
-  final Offset control;
+  final Offset c1;
+  final Offset c2;
   final Offset tip;
-  const _Stem(this.base, this.control, this.tip);
+  const _Stem(this.base, this.c1, this.c2, this.tip);
 }
 
 class _VasePainter extends CustomPainter {
   final VaseState state;
   final bool isDark;
+  final Color tint;
 
-  _VasePainter({required this.state, required this.isDark});
+  _VasePainter({required this.state, required this.isDark, required this.tint});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -144,87 +161,95 @@ class _VasePainter extends CustomPainter {
     final h = size.height;
     final cx = w / 2;
 
-    final vaseTopY = h * 0.52;
-    final vaseBottomY = h * 0.96;
+    final vaseTopY = h * 0.56;
+    final vaseBottomY = h * 0.97;
 
     if (state != VaseState.empty) {
-      _drawStems(canvas, w, h, cx, vaseTopY);
+      _drawStems(canvas, cx, vaseTopY, vaseBottomY);
     }
 
-    _drawVase(canvas, w, h, cx, vaseTopY, vaseBottomY);
+    _drawVase(canvas, w, cx, vaseTopY, vaseBottomY);
+
+    if (state == VaseState.dried) {
+      _drawFallenPetals(canvas, cx, vaseBottomY);
+    }
   }
 
-  void _drawVase(Canvas canvas, double w, double h, double cx,
-      double vaseTopY, double vaseBottomY) {
-    final openW = w * 0.42;
-    final bodyW = w * 0.58;
-    final bottomW = w * 0.34;
+  void _drawVase(
+      Canvas canvas, double w, double cx, double vaseTopY, double vaseBottomY) {
+    final openW = w * 0.46;
+    final bodyW = w * 0.66;
+    final bottomW = w * 0.38;
     final vaseH = vaseBottomY - vaseTopY;
 
-    Color fill;
-    Color outline;
-    switch (state) {
-      case VaseState.empty:
-        fill = isDark ? const Color(0xFF5A5A5A) : const Color(0xFFD0C8BC);
-        outline = isDark ? const Color(0xFF4A4A4A) : const Color(0xFFB8AFA3);
-        break;
-      case VaseState.dried:
-        fill = isDark ? const Color(0xFF5C5346) : const Color(0xFFC4B8A8);
-        outline = isDark ? const Color(0xFF4C4338) : const Color(0xFFADA192);
-        break;
-      case VaseState.wilting:
-        fill = isDark ? const Color(0xFF6B5F4E) : const Color(0xFFD4C4A8);
-        outline = isDark ? const Color(0xFF5A4F3E) : const Color(0xFFBFAF93);
-        break;
-      case VaseState.alive:
-        fill = isDark ? const Color(0xFF5E6B5A) : const Color(0xFFC8D4C0);
-        outline = isDark ? const Color(0xFF4E5B4A) : const Color(0xFFB0BCA8);
-        break;
-      case VaseState.fresh:
-        fill = isDark ? const Color(0xFF5A6B6E) : const Color(0xFFBCD4D8);
-        outline = isDark ? const Color(0xFF4A5B5E) : const Color(0xFFA4BCC0);
-        break;
-    }
+    // Ceramic tinted by the current theme so the vase always matches it.
+    final fillTop = Color.lerp(
+        isDark ? const Color(0xFF3A3A50) : Colors.white, tint,
+        isDark ? 0.30 : 0.22)!;
+    final fillBottom = Color.lerp(
+        isDark ? const Color(0xFF2E2E42) : Colors.white, tint,
+        isDark ? 0.45 : 0.40)!;
+    final outline = Color.lerp(
+        isDark ? const Color(0xFF55556E) : const Color(0xFFB0A6B8), tint,
+        0.35)!;
 
     final path = Path();
-    final rimY = vaseTopY - 2;
-    path.moveTo(cx - openW / 2 - 2, rimY);
-    path.lineTo(cx + openW / 2 + 2, rimY);
+    final rimY = vaseTopY - 3;
+    path.moveTo(cx - openW / 2 - 2.5, rimY);
+    path.quadraticBezierTo(cx, rimY - 2.5, cx + openW / 2 + 2.5, rimY);
     path.lineTo(cx + openW / 2, vaseTopY);
     path.cubicTo(
-      cx + bodyW / 2 + 2, vaseTopY + vaseH * 0.3,
-      cx + bodyW / 2, vaseTopY + vaseH * 0.65,
-      cx + bottomW / 2, vaseBottomY,
+      cx + bodyW / 2 + 3, vaseTopY + vaseH * 0.30,
+      cx + bodyW / 2 + 1, vaseTopY + vaseH * 0.68,
+      cx + bottomW / 2, vaseBottomY - 2,
     );
-    path.lineTo(cx - bottomW / 2, vaseBottomY);
+    path.quadraticBezierTo(
+        cx, vaseBottomY + 2, cx - bottomW / 2, vaseBottomY - 2);
     path.cubicTo(
-      cx - bodyW / 2, vaseTopY + vaseH * 0.65,
-      cx - bodyW / 2 - 2, vaseTopY + vaseH * 0.3,
+      cx - bodyW / 2 - 1, vaseTopY + vaseH * 0.68,
+      cx - bodyW / 2 - 3, vaseTopY + vaseH * 0.30,
       cx - openW / 2, vaseTopY,
     );
     path.close();
 
-    canvas.drawPath(path, Paint()..color = fill);
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [fillTop, fillBottom],
+      ).createShader(
+          Rect.fromLTRB(cx - bodyW / 2, rimY, cx + bodyW / 2, vaseBottomY));
+    canvas.drawPath(path, fillPaint);
 
+    // Glossy highlight along the left side.
     canvas.save();
     canvas.clipPath(path);
-    final hlPath = Path();
-    hlPath.moveTo(cx - openW / 2 + 3, vaseTopY + 3);
-    hlPath.cubicTo(
-      cx - bodyW / 2 + 7, vaseTopY + vaseH * 0.35,
-      cx - bodyW / 2 + 9, vaseTopY + vaseH * 0.6,
-      cx - bottomW / 2 + 5, vaseBottomY - 4,
-    );
-    hlPath.lineTo(cx - bottomW / 2 + 8, vaseBottomY - 4);
-    hlPath.cubicTo(
-      cx - bodyW / 2 + 12, vaseTopY + vaseH * 0.6,
-      cx - bodyW / 2 + 10, vaseTopY + vaseH * 0.35,
-      cx - openW / 2 + 6, vaseTopY + 3,
-    );
-    hlPath.close();
+    final hl = Path()
+      ..moveTo(cx - openW / 2 + 4, vaseTopY + 4)
+      ..cubicTo(
+        cx - bodyW / 2 + 8, vaseTopY + vaseH * 0.34,
+        cx - bodyW / 2 + 10, vaseTopY + vaseH * 0.62,
+        cx - bottomW / 2 + 6, vaseBottomY - 6,
+      )
+      ..lineTo(cx - bottomW / 2 + 12, vaseBottomY - 6)
+      ..cubicTo(
+        cx - bodyW / 2 + 16, vaseTopY + vaseH * 0.62,
+        cx - bodyW / 2 + 14, vaseTopY + vaseH * 0.34,
+        cx - openW / 2 + 10, vaseTopY + 4,
+      )
+      ..close();
     canvas.drawPath(
-      hlPath,
-      Paint()..color = Colors.white.withValues(alpha: isDark ? 0.06 : 0.18),
+      hl,
+      Paint()..color = Colors.white.withValues(alpha: isDark ? 0.08 : 0.35),
+    );
+    // Water line just below the neck.
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(cx, vaseTopY + vaseH * 0.18),
+        width: openW + 8,
+        height: 7,
+      ),
+      Paint()..color = Colors.white.withValues(alpha: isDark ? 0.10 : 0.30),
     );
     canvas.restore();
 
@@ -233,128 +258,130 @@ class _VasePainter extends CustomPainter {
       Paint()
         ..color = outline
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4,
+        ..strokeWidth = 1.6,
     );
   }
 
   void _drawStems(
-      Canvas canvas, double w, double h, double cx, double vaseTopY) {
+      Canvas canvas, double cx, double vaseTopY, double vaseBottomY) {
     List<_Stem> stems;
     Color stemColor;
     Color leafColor;
     List<Color> flowerColors;
-    double petalRadius;
+    double flowerR;
     int petalCount;
+    bool drooping;
     bool showLeaves;
-    bool showPetals;
 
     switch (state) {
       case VaseState.empty:
         return;
 
       case VaseState.dried:
+        // Heads hang over the rim — sad, but soft and cared-for, not ugly.
         stems = [
-          _Stem(Offset(cx - 6, vaseTopY), Offset(cx - 18, vaseTopY - 18),
-              Offset(cx - 22, vaseTopY - 8)),
-          _Stem(Offset(cx, vaseTopY), Offset(cx + 2, vaseTopY - 28),
-              Offset(cx + 4, vaseTopY - 22)),
-          _Stem(Offset(cx + 6, vaseTopY), Offset(cx + 16, vaseTopY - 16),
-              Offset(cx + 24, vaseTopY - 6)),
+          _Stem(Offset(cx - 5, vaseTopY), Offset(cx - 9, vaseTopY - 24),
+              Offset(cx - 22, vaseTopY - 26), Offset(cx - 24, vaseTopY - 12)),
+          _Stem(Offset(cx, vaseTopY), Offset(cx + 1, vaseTopY - 32),
+              Offset(cx + 9, vaseTopY - 33), Offset(cx + 11, vaseTopY - 22)),
+          _Stem(Offset(cx + 5, vaseTopY), Offset(cx + 9, vaseTopY - 20),
+              Offset(cx + 21, vaseTopY - 21), Offset(cx + 23, vaseTopY - 9)),
         ];
         stemColor =
-            isDark ? const Color(0xFF7A6B55) : const Color(0xFF8B7355);
-        leafColor = Colors.transparent;
-        flowerColors = [
-          const Color(0xFF6B5A42),
-          const Color(0xFF7A6950),
-          const Color(0xFF5C4A35),
+            isDark ? const Color(0xFF8A7A60) : const Color(0xFFA08868);
+        leafColor =
+            isDark ? const Color(0xFF7A6E55) : const Color(0xFFB0A07A);
+        flowerColors = const [
+          Color(0xFFB08A78),
+          Color(0xFFA89070),
+          Color(0xFFBA9484),
         ];
-        petalRadius = 0;
-        petalCount = 0;
+        flowerR = 4.5;
+        petalCount = 5;
+        drooping = true;
         showLeaves = false;
-        showPetals = false;
         break;
 
       case VaseState.wilting:
         stems = [
-          _Stem(Offset(cx - 6, vaseTopY), Offset(cx - 14, vaseTopY - 26),
-              Offset(cx - 16, vaseTopY - 18)),
-          _Stem(Offset(cx, vaseTopY), Offset(cx + 1, vaseTopY - 34),
-              Offset(cx + 2, vaseTopY - 28)),
-          _Stem(Offset(cx + 6, vaseTopY), Offset(cx + 12, vaseTopY - 24),
-              Offset(cx + 18, vaseTopY - 16)),
+          _Stem(Offset(cx - 6, vaseTopY), Offset(cx - 10, vaseTopY - 22),
+              Offset(cx - 15, vaseTopY - 30), Offset(cx - 17, vaseTopY - 26)),
+          _Stem(Offset(cx, vaseTopY), Offset(cx + 1, vaseTopY - 26),
+              Offset(cx + 2, vaseTopY - 36), Offset(cx + 3, vaseTopY - 34)),
+          _Stem(Offset(cx + 6, vaseTopY), Offset(cx + 10, vaseTopY - 20),
+              Offset(cx + 16, vaseTopY - 28), Offset(cx + 19, vaseTopY - 24)),
         ];
         stemColor =
-            isDark ? const Color(0xFF8A8550) : const Color(0xFF9A9060);
+            isDark ? const Color(0xFF8A8A55) : const Color(0xFF9A9A60);
         leafColor =
-            isDark ? const Color(0xFF7A7A40) : const Color(0xFFB0A860);
-        flowerColors = [
-          const Color(0xFFD4A840),
-          const Color(0xFFC49838),
-          const Color(0xFFD4B050),
+            isDark ? const Color(0xFF7E8048) : const Color(0xFFB0AC68);
+        flowerColors = const [
+          Color(0xFFE0B060),
+          Color(0xFFD89A58),
+          Color(0xFFE0A878),
         ];
-        petalRadius = 3.0;
-        petalCount = 4;
+        flowerR = 6.0;
+        petalCount = 5;
+        drooping = false;
         showLeaves = true;
-        showPetals = true;
         break;
 
       case VaseState.alive:
         stems = [
-          _Stem(Offset(cx - 7, vaseTopY), Offset(cx - 12, vaseTopY - 30),
-              Offset(cx - 14, vaseTopY - 38)),
-          _Stem(Offset(cx, vaseTopY), Offset(cx, vaseTopY - 36),
-              Offset(cx, vaseTopY - 42)),
-          _Stem(Offset(cx + 7, vaseTopY), Offset(cx + 10, vaseTopY - 28),
-              Offset(cx + 16, vaseTopY - 36)),
+          _Stem(Offset(cx - 8, vaseTopY), Offset(cx - 11, vaseTopY - 18),
+              Offset(cx - 14, vaseTopY - 32), Offset(cx - 16, vaseTopY - 40)),
+          _Stem(Offset(cx - 1, vaseTopY), Offset(cx - 1, vaseTopY - 20),
+              Offset(cx, vaseTopY - 36), Offset(cx, vaseTopY - 46)),
+          _Stem(Offset(cx + 7, vaseTopY), Offset(cx + 9, vaseTopY - 18),
+              Offset(cx + 13, vaseTopY - 30), Offset(cx + 17, vaseTopY - 38)),
         ];
         stemColor =
-            isDark ? const Color(0xFF4A8A4A) : const Color(0xFF5A9A5A);
+            isDark ? const Color(0xFF4A8A4A) : const Color(0xFF5FA05F);
         leafColor =
-            isDark ? const Color(0xFF3A7A3A) : const Color(0xFF6AAA5A);
-        flowerColors = [
-          const Color(0xFFD07090),
-          const Color(0xFFB060A0),
-          const Color(0xFFC06888),
+            isDark ? const Color(0xFF3A7A3A) : const Color(0xFF6FB060);
+        flowerColors = const [
+          Color(0xFFE27A9E),
+          Color(0xFFB57BC8),
+          Color(0xFFD9719A),
         ];
-        petalRadius = 3.8;
-        petalCount = 5;
+        flowerR = 7.5;
+        petalCount = 6;
+        drooping = false;
         showLeaves = true;
-        showPetals = true;
         break;
 
       case VaseState.fresh:
         stems = [
-          _Stem(Offset(cx - 8, vaseTopY), Offset(cx - 16, vaseTopY - 32),
-              Offset(cx - 18, vaseTopY - 42)),
-          _Stem(Offset(cx - 2, vaseTopY), Offset(cx - 3, vaseTopY - 38),
-              Offset(cx - 2, vaseTopY - 46)),
-          _Stem(Offset(cx + 4, vaseTopY), Offset(cx + 5, vaseTopY - 36),
-              Offset(cx + 6, vaseTopY - 44)),
-          _Stem(Offset(cx + 9, vaseTopY), Offset(cx + 16, vaseTopY - 30),
-              Offset(cx + 20, vaseTopY - 40)),
+          _Stem(Offset(cx - 9, vaseTopY), Offset(cx - 13, vaseTopY - 18),
+              Offset(cx - 17, vaseTopY - 32), Offset(cx - 20, vaseTopY - 40)),
+          _Stem(Offset(cx - 3, vaseTopY), Offset(cx - 4, vaseTopY - 22),
+              Offset(cx - 4, vaseTopY - 38), Offset(cx - 3, vaseTopY - 48)),
+          _Stem(Offset(cx + 3, vaseTopY), Offset(cx + 4, vaseTopY - 20),
+              Offset(cx + 6, vaseTopY - 34), Offset(cx + 8, vaseTopY - 44)),
+          _Stem(Offset(cx + 9, vaseTopY), Offset(cx + 13, vaseTopY - 16),
+              Offset(cx + 18, vaseTopY - 28), Offset(cx + 22, vaseTopY - 36)),
         ];
         stemColor =
-            isDark ? const Color(0xFF3A9A3A) : const Color(0xFF4AAA4A);
+            isDark ? const Color(0xFF3A9A3A) : const Color(0xFF4FAF5F);
         leafColor =
-            isDark ? const Color(0xFF2A8A2A) : const Color(0xFF5ABA4A);
-        flowerColors = [
-          const Color(0xFFE06090),
-          const Color(0xFFA050C0),
-          const Color(0xFFD07098),
-          const Color(0xFF7070D0),
+            isDark ? const Color(0xFF2A8A2A) : const Color(0xFF5FBF55);
+        flowerColors = const [
+          Color(0xFFE85A90),
+          Color(0xFF8E5FD8),
+          Color(0xFFF0789C),
+          Color(0xFF6A78E0),
         ];
-        petalRadius = 4.5;
-        petalCount = 5;
+        flowerR = 8.5;
+        petalCount = 6;
+        drooping = false;
         showLeaves = true;
-        showPetals = true;
         break;
     }
 
     final stemPaint = Paint()
       ..color = stemColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8
+      ..strokeWidth = 3.0
       ..strokeCap = StrokeCap.round;
 
     for (int i = 0; i < stems.length; i++) {
@@ -362,49 +389,73 @@ class _VasePainter extends CustomPainter {
 
       final stemPath = Path()
         ..moveTo(s.base.dx, s.base.dy)
-        ..quadraticBezierTo(s.control.dx, s.control.dy, s.tip.dx, s.tip.dy);
+        ..cubicTo(s.c1.dx, s.c1.dy, s.c2.dx, s.c2.dy, s.tip.dx, s.tip.dy);
       canvas.drawPath(stemPath, stemPaint);
 
-      if (showLeaves && i < 3) {
-        final t = 0.4;
-        final lx = _bezierPoint(s.base.dx, s.control.dx, s.tip.dx, t);
-        final ly = _bezierPoint(s.base.dy, s.control.dy, s.tip.dy, t);
+      if (showLeaves) {
+        const t = 0.42;
+        final lx = _cubicPoint(s.base.dx, s.c1.dx, s.c2.dx, s.tip.dx, t);
+        final ly = _cubicPoint(s.base.dy, s.c1.dy, s.c2.dy, s.tip.dy, t);
         final side = (i % 2 == 0) ? 1.0 : -1.0;
-        _drawLeaf(canvas, lx, ly, side * 35, leafColor, 7);
+        _drawLeaf(canvas, lx, ly, side * 38, leafColor, 13);
       }
 
-      if (showPetals) {
-        _drawFlower(canvas, s.tip.dx, s.tip.dy, petalRadius, petalCount,
-            flowerColors[i % flowerColors.length]);
-      } else {
-        canvas.drawCircle(
-          s.tip,
-          2.5,
-          Paint()..color = flowerColors[i % flowerColors.length],
-        );
-      }
+      _drawFlower(canvas, s.tip.dx, s.tip.dy, flowerR, petalCount,
+          flowerColors[i % flowerColors.length],
+          drooping: drooping);
+    }
+
+    // Baby's breath between the stems on the best days.
+    if (state == VaseState.fresh) {
+      final dotPaint = Paint()
+        ..color = (isDark ? Colors.white70 : Colors.white)
+            .withValues(alpha: isDark ? 0.7 : 0.95);
+      canvas.drawCircle(Offset(cx - 11, vaseTopY - 28), 2.2, dotPaint);
+      canvas.drawCircle(Offset(cx + 1, vaseTopY - 26), 1.8, dotPaint);
+      canvas.drawCircle(Offset(cx + 13, vaseTopY - 22), 2.2, dotPaint);
     }
   }
 
-  double _bezierPoint(double p0, double p1, double p2, double t) {
+  double _cubicPoint(double p0, double p1, double p2, double p3, double t) {
     final mt = 1 - t;
-    return mt * mt * p0 + 2 * mt * t * p1 + t * t * p2;
+    return mt * mt * mt * p0 +
+        3 * mt * mt * t * p1 +
+        3 * mt * t * t * p2 +
+        t * t * t * p3;
   }
 
-  void _drawFlower(Canvas canvas, double x, double y, double radius,
-      int petals, Color color) {
-    final petalPaint = Paint()..color = color;
-    final centerColor = Color.lerp(color, const Color(0xFFFFF8DC), 0.45)!;
-    final centerPaint = Paint()..color = centerColor;
+  /// Lush layered flower: a ring of oval petals, a lighter inner ring and
+  /// a warm centre. [drooping] tilts the head downward for sad states.
+  void _drawFlower(Canvas canvas, double x, double y, double r, int petals,
+      Color color,
+      {bool drooping = false}) {
+    canvas.save();
+    canvas.translate(x, y);
+    if (drooping) canvas.rotate(math.pi * 0.85);
+
+    final outerPaint = Paint()..color = color;
+    final innerPaint = Paint()..color = Color.lerp(color, Colors.white, 0.30)!;
 
     for (int i = 0; i < petals; i++) {
-      final angle = (i * 2 * math.pi / petals) - math.pi / 2;
-      final px = x + radius * 0.9 * math.cos(angle);
-      final py = y + radius * 0.9 * math.sin(angle);
-      canvas.drawCircle(Offset(px, py), radius * 0.55, petalPaint);
+      canvas.save();
+      canvas.rotate(i * 2 * math.pi / petals);
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(0, -r * 0.62),
+          width: r * 0.80,
+          height: r * 1.10,
+        ),
+        outerPaint,
+      );
+      canvas.restore();
     }
-
-    canvas.drawCircle(Offset(x, y), radius * 0.38, centerPaint);
+    canvas.drawCircle(Offset.zero, r * 0.46, innerPaint);
+    canvas.drawCircle(
+      Offset.zero,
+      r * 0.26,
+      Paint()..color = const Color(0xFFFFF0C0),
+    );
+    canvas.restore();
   }
 
   void _drawLeaf(Canvas canvas, double x, double y, double angleDeg,
@@ -416,16 +467,33 @@ class _VasePainter extends CustomPainter {
 
     final leafPath = Path()
       ..moveTo(0, 0)
-      ..cubicTo(length * 0.3, -length * 0.18, length * 0.7, -length * 0.18,
+      ..cubicTo(length * 0.3, -length * 0.26, length * 0.7, -length * 0.26,
           length, 0)
       ..cubicTo(
-          length * 0.7, length * 0.18, length * 0.3, length * 0.18, 0, 0);
+          length * 0.7, length * 0.26, length * 0.3, length * 0.26, 0, 0);
     canvas.drawPath(leafPath, paint);
+    canvas.restore();
+  }
+
+  void _drawFallenPetals(Canvas canvas, double cx, double vaseBottomY) {
+    final paint = Paint()
+      ..color = const Color(0xFFB08A78).withValues(alpha: 0.8);
+    canvas.save();
+    canvas.translate(cx + 22, vaseBottomY - 1);
+    canvas.rotate(0.5);
+    canvas.drawOval(
+        Rect.fromCenter(center: Offset.zero, width: 6, height: 3.6), paint);
+    canvas.restore();
+    canvas.save();
+    canvas.translate(cx - 24, vaseBottomY - 1);
+    canvas.rotate(-0.4);
+    canvas.drawOval(
+        Rect.fromCenter(center: Offset.zero, width: 5, height: 3), paint);
     canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant _VasePainter old) {
-    return old.state != state || old.isDark != isDark;
+    return old.state != state || old.isDark != isDark || old.tint != tint;
   }
 }

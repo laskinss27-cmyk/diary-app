@@ -153,7 +153,7 @@ class _EntrySectionState extends State<EntrySection>
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
           children: [
-            MoodBadge(score: score, size: 36),
+            MoodBadge(score: score, size: 36, emoji: e.mood),
             const SizedBox(width: 14),
             Text(
               _formatTime(e.date),

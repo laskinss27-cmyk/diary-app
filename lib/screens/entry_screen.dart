@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -12,6 +13,7 @@ import '../services/database_service.dart';
 import '../services/gemini_service.dart';
 import '../services/mood_fallback.dart';
 import '../services/lexicon_analyzer.dart';
+import '../services/local_llm_service.dart';
 import '../services/analysis_mode.dart';
 import '../widgets/frosted_background.dart';
 
@@ -238,6 +240,18 @@ class _EntryScreenState extends State<EntryScreen>
           }
         } catch (_) {}
         break;
+      case AnalysisMode.local:
+        // Save instantly with the fast offline analysis; Gemma re-analyzes
+        // in the background and quietly updates the entry (a minute or so
+        // on a phone CPU — never make the user stare at a spinner).
+        try {
+          analysis = (await LexiconAnalyzer.analyze(text))
+              .copyWith(source: AnalysisSource.lexicon);
+        } catch (_) {
+          analysis = MoodFallback.analyze(text)
+              .copyWith(source: AnalysisSource.fast);
+        }
+        break;
     }
 
     final entry = DiaryEntry(
@@ -250,6 +264,9 @@ class _EntryScreenState extends State<EntryScreen>
     );
 
     await DatabaseService.insertEntry(entry);
+    if (mode == AnalysisMode.local) {
+      unawaited(LocalLlmService.upgradeEntryInBackground(entry));
+    }
 
     if (!mounted) return;
     Navigator.pop(context, entry);

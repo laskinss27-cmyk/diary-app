@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
+import '../main.dart';
+import 'mood_face.dart';
 
+/// Soft mood indicator: a theme-tinted circle with the user's own mood
+/// emoji. No traffic-light colours and no visible grade — the tint just
+/// gets richer on better days. Crisis entries (score <= 1) keep the
+/// pulsing SOS so the help path stays noticeable.
 class MoodBadge extends StatefulWidget {
   final int score;
   final double size;
-  const MoodBadge({super.key, required this.score, this.size = 36});
+  final String? emoji;
+  const MoodBadge({super.key, required this.score, this.size = 36, this.emoji});
 
   @override
   State<MoodBadge> createState() => _MoodBadgeState();
@@ -30,50 +37,36 @@ class _MoodBadgeState extends State<MoodBadge>
     super.dispose();
   }
 
-  Color _colorForScore(int s) {
-    if (s >= 9) return const Color(0xFF43A047);
-    if (s >= 7) return const Color(0xFF8BC34A);
-    if (s >= 5) return const Color(0xFFFFC107);
-    if (s >= 3) return const Color(0xFFFF9800);
-    if (s >= 2) return const Color(0xFFE53935);
-    return const Color(0xFFC62828);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final color = _colorForScore(widget.score);
+    final t = DiaryApp.themeNotifier.theme;
+    final color = t.moodColor(widget.score);
     final size = widget.size;
     final crisis = widget.score <= 1;
+    final emoji = widget.emoji;
 
-    final badge = Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        gradient: RadialGradient(
-          colors: [color.withValues(alpha: 0.95), color],
-          stops: const [0.0, 1.0],
-        ),
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.35),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      alignment: Alignment.center,
-      child: crisis
-          ? Text('🆘', style: TextStyle(fontSize: size * 0.5))
-          : Text(
-              '${widget.score}',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: size * 0.42,
+    // The faces are round neon bubbles already — a circle around them
+    // would be a double frame, so they go full-size on their own.
+    final badge = crisis
+        ? Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.22),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: color.withValues(alpha: 0.55),
+                width: 1.2,
               ),
             ),
-    );
+            alignment: Alignment.center,
+            child: Text('🆘', style: TextStyle(fontSize: size * 0.5)),
+          )
+        : MoodFace(
+            emoji: emoji ?? '',
+            score: widget.score,
+            size: size,
+          );
 
     if (_pulse == null) return badge;
     return ScaleTransition(

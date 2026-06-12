@@ -36,6 +36,25 @@ class AppThemeData {
         end: Alignment.bottomCenter,
         colors: [backgroundTop, background],
       );
+
+  /// Mood tint in the theme's own hue: low scores are washed-out and pale,
+  /// high scores rich and saturated. No traffic-light reds/greens — the
+  /// diary must not look like it grades the user.
+  Color moodColor(int score) {
+    final s = score.clamp(0, 10) / 10.0;
+    final muted = Color.lerp(primary, textHint, 0.6)!;
+    final vivid = Color.lerp(primary, accent, 0.5)!;
+    return Color.lerp(muted, vivid, s)!;
+  }
+
+  /// Human wording instead of a "3/10" grade.
+  static String moodLabel(int score) {
+    if (score >= 9) return 'прекрасно';
+    if (score >= 7) return 'хорошо';
+    if (score >= 5) return 'ровно';
+    if (score >= 3) return 'непросто';
+    return 'очень тяжело';
+  }
 }
 
 class AppThemes {

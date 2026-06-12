@@ -18,6 +18,7 @@ import 'settings_screen.dart';
 import 'report_screen.dart';
 import 'calendar_screen.dart';
 import 'help_screen.dart';
+import 'coloring_list_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -177,6 +178,14 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const HelpScreen()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.brush_rounded, color: Colors.white),
+            tooltip: 'Раскраски',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ColoringListScreen()),
             ),
           ),
           IconButton(
