@@ -1219,6 +1219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       AnalysisMode.lexicon => Icons.menu_book_rounded,
       AnalysisMode.ai => Icons.auto_awesome_rounded,
       AnalysisMode.local => Icons.memory_rounded,
+      AnalysisMode.none => Icons.do_not_disturb_on_outlined,
     };
     return GestureDetector(
       onTap: () => _setAnalysisMode(mode),

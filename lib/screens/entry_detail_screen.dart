@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../models/diary_entry.dart';
 import '../services/database_service.dart';
+import '../services/local_llm_service.dart';
 import '../widgets/analysis_badge.dart';
 import '../widgets/frosted_background.dart';
 import '../widgets/mood_badge.dart';
@@ -25,11 +26,16 @@ class EntryDetailScreen extends StatefulWidget {
 
 class _EntryDetailScreenState extends State<EntryDetailScreen> {
   late DiaryEntry entry = widget.entry;
+  bool _modelReady = false;
+  bool _analyzing = false;
 
   @override
   void initState() {
     super.initState();
     DatabaseService.revision.addListener(_reload);
+    LocalLlmService.isModelReady().then((r) {
+      if (mounted) setState(() => _modelReady = r);
+    });
   }
 
   @override
@@ -42,6 +48,33 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
     final all = await DatabaseService.loadEntries();
     final fresh = all.where((e) => e.id == widget.entry.id).firstOrNull;
     if (fresh != null && mounted) setState(() => entry = fresh);
+  }
+
+  Future<void> _analyzeByHand() async {
+    if (entry.text.trim().isEmpty) return;
+    setState(() => _analyzing = true);
+    MoodAnalysis? result;
+    try {
+      result = await LocalLlmService.analyze(entry.text);
+    } catch (_) {}
+    if (result != null) {
+      await DatabaseService.updateEntry(
+        entry.copyWith(
+          analysis: result,
+          mood: result.emoji,
+          skipAutoAnalysis: false,
+        ),
+      );
+      // revision listener reloads `entry`.
+    }
+    if (mounted) {
+      setState(() => _analyzing = false);
+      if (result == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось проанализировать')),
+        );
+      }
+    }
   }
 
   @override
@@ -122,6 +155,37 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
               if (entry.photoPaths.isNotEmpty) ...[
                 const SizedBox(height: 20),
                 _photoStrip(context, entry),
+              ],
+              // Manual AI analysis — for entries not yet processed by the net
+              // (dictionary / manual / no-analysis). Needs the model present.
+              if (_modelReady &&
+                  entry.analysis?.source != AnalysisSource.local &&
+                  entry.analysis?.source != AnalysisSource.ai) ...[
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _analyzing ? null : _analyzeByHand,
+                    icon: _analyzing
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: t.primary),
+                          )
+                        : const Text('🧠', style: TextStyle(fontSize: 16)),
+                    label: Text(_analyzing
+                        ? 'Анализирую…'
+                        : 'Проанализировать нейросетью'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: t.textSecondary,
+                      side: BorderSide(color: t.primary.withValues(alpha: 0.4)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
               ],
               if (entry.analysis != null &&
                   entry.analysis!.keywords.isNotEmpty) ...[

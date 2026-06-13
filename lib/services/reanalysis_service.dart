@@ -69,6 +69,8 @@ class ReanalysisService {
     final cutoff = now.subtract(const Duration(days: _lookbackDays));
     final candidates = all.where((e) {
       if (e.text.trim().isEmpty) return false;
+      // "No analysis" entries are opted out — only manual trigger touches them.
+      if (e.skipAutoAnalysis) return false;
       if (!useLocal && !e.date.isAfter(cutoff)) return false;
       final a = e.analysis;
       if (a == null) return true;

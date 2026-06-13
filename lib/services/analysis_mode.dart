@@ -15,6 +15,10 @@ enum AnalysisMode {
   /// On-device LLM (Gemma 3n) — no internet, nothing leaves the phone.
   /// Requires the model file (~3.1 GB) to be downloaded first.
   local,
+
+  /// No analysis at all — entries are saved as plain text; the user can
+  /// pick a mood by hand, or leave none.
+  none,
 }
 
 extension AnalysisModeX on AnalysisMode {
@@ -23,6 +27,7 @@ extension AnalysisModeX on AnalysisMode {
         AnalysisMode.lexicon => 'lexicon',
         AnalysisMode.ai => 'ai',
         AnalysisMode.local => 'local',
+        AnalysisMode.none => 'none',
       };
 
   String get title => switch (this) {
@@ -30,6 +35,7 @@ extension AnalysisModeX on AnalysisMode {
         AnalysisMode.lexicon => 'Точный офлайн',
         AnalysisMode.ai => 'AI (облако)',
         AnalysisMode.local => 'Локальный ИИ',
+        AnalysisMode.none => 'Без анализа',
       };
 
   String get description => switch (this) {
@@ -41,6 +47,8 @@ extension AnalysisModeX on AnalysisMode {
           'Лучшее качество, понимает контекст и иронию. Требует интернет, текст отправляется на API.',
         AnalysisMode.local =>
           'Нейросеть Gemma 3n работает прямо на телефоне: понимает контекст, а записи никогда не покидают устройство. Нужно один раз скачать модель (~3 ГБ).',
+        AnalysisMode.none =>
+          'Без автоматической оценки. Настроение выбираешь сам при записи (или оставляешь без него). Анализ ИИ можно запустить вручную для любой записи.',
       };
 }
 
@@ -55,6 +63,7 @@ class AnalysisModeStore {
       'lexicon' => AnalysisMode.lexicon,
       'ai' => AnalysisMode.ai,
       'local' => AnalysisMode.local,
+      'none' => AnalysisMode.none,
       _ => null,
     };
     if (saved != null) return saved;

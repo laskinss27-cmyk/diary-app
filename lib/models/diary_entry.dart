@@ -60,6 +60,10 @@ class DiaryEntry {
   final MoodAnalysis? analysis;
   final List<String> photoPaths;
 
+  /// True for entries saved in "no analysis" mode: the background AI sweep
+  /// must skip them forever. The user can still trigger analysis by hand.
+  final bool skipAutoAnalysis;
+
   const DiaryEntry({
     required this.id,
     required this.text,
@@ -67,6 +71,7 @@ class DiaryEntry {
     required this.mood,
     this.analysis,
     this.photoPaths = const [],
+    this.skipAutoAnalysis = false,
   });
 
   DiaryEntry copyWith({
@@ -74,6 +79,7 @@ class DiaryEntry {
     String? mood,
     List<String>? photoPaths,
     DateTime? date,
+    bool? skipAutoAnalysis,
   }) =>
       DiaryEntry(
         id: id,
@@ -82,6 +88,7 @@ class DiaryEntry {
         mood: mood ?? this.mood,
         analysis: analysis ?? this.analysis,
         photoPaths: photoPaths ?? this.photoPaths,
+        skipAutoAnalysis: skipAutoAnalysis ?? this.skipAutoAnalysis,
       );
 
   Map<String, dynamic> toJson() => {
@@ -91,6 +98,7 @@ class DiaryEntry {
         'mood': mood,
         'analysis': analysis?.toJson(),
         'photoPaths': photoPaths,
+        'skipAutoAnalysis': skipAutoAnalysis,
       };
 
   factory DiaryEntry.fromJson(Map<String, dynamic> json) => DiaryEntry(
@@ -104,6 +112,7 @@ class DiaryEntry {
         photoPaths: json['photoPaths'] != null
             ? List<String>.from(json['photoPaths'] as List)
             : [],
+        skipAutoAnalysis: json['skipAutoAnalysis'] as bool? ?? false,
       );
 
   static String encode(List<DiaryEntry> entries) =>

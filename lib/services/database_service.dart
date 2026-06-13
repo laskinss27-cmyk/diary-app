@@ -25,7 +25,7 @@ class DatabaseService {
 
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE entries (
@@ -34,7 +34,8 @@ class DatabaseService {
             date TEXT NOT NULL,
             mood TEXT NOT NULL,
             analysis TEXT,
-            photo_paths TEXT
+            photo_paths TEXT,
+            skip_auto INTEGER DEFAULT 0
           )
         ''');
         debugPrint('Database created v$version');
@@ -42,8 +43,12 @@ class DatabaseService {
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await db.execute('ALTER TABLE entries ADD COLUMN photo_paths TEXT');
-          debugPrint('Database upgraded to v$newVersion');
         }
+        if (oldVersion < 3) {
+          await db.execute(
+              'ALTER TABLE entries ADD COLUMN skip_auto INTEGER DEFAULT 0');
+        }
+        debugPrint('Database upgraded to v$newVersion');
       },
     );
   }
@@ -129,6 +134,7 @@ class DatabaseService {
         'mood': entry.mood,
         'analysis': entry.analysis != null ? jsonEncode(entry.analysis!.toJson()) : null,
         'photo_paths': entry.photoPaths.isNotEmpty ? jsonEncode(entry.photoPaths) : null,
+        'skip_auto': entry.skipAutoAnalysis ? 1 : 0,
       };
 
   static DiaryEntry _entryFromMap(Map<String, dynamic> map) {
@@ -155,6 +161,7 @@ class DatabaseService {
       mood: map['mood'] as String,
       analysis: analysis,
       photoPaths: photoPaths,
+      skipAutoAnalysis: (map['skip_auto'] as int?) == 1,
     );
   }
 }

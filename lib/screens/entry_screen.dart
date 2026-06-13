@@ -16,6 +16,7 @@ import '../services/lexicon_analyzer.dart';
 import '../services/local_llm_service.dart';
 import '../services/analysis_mode.dart';
 import '../widgets/frosted_background.dart';
+import '../widgets/mood_face.dart';
 
 /// Full-screen entry editor — opens via Navigator.push.
 /// Returns the saved DiaryEntry on pop, or null if cancelled.
@@ -41,6 +42,10 @@ class _EntryScreenState extends State<EntryScreen>
   final List<String> _pendingPhotos = [];
   final ImagePicker _imagePicker = ImagePicker();
 
+  // "No analysis" mode: optional hand-picked mood. null = no mood.
+  AnalysisMode _mode = AnalysisMode.lexicon;
+  int? _manualScore; // chosen mood's score, or null
+
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
@@ -54,6 +59,9 @@ class _EntryScreenState extends State<EntryScreen>
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+    AnalysisModeStore.load().then((m) {
+      if (mounted) setState(() => _mode = m);
+    });
     _initSpeech();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
@@ -66,6 +74,22 @@ class _EntryScreenState extends State<EntryScreen>
     _textController.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  /// Mood scale for the manual picker (no-analysis mode).
+  static const _manualMoods = <(int, String)>[
+    (2, '😢'),
+    (4, '😕'),
+    (5, '🙂'),
+    (7, '😊'),
+    (9, '😄'),
+  ];
+
+  String _emojiForScore(int score) {
+    for (final (s, e) in _manualMoods) {
+      if (s == score) return e;
+    }
+    return '🙂';
   }
 
   Future<void> _initSpeech() async {
@@ -207,9 +231,44 @@ class _EntryScreenState extends State<EntryScreen>
     FocusScope.of(context).unfocus();
 
     final mode = await AnalysisModeStore.load();
+
+    // "No analysis" mode: save plain text (+ optional hand-picked mood),
+    // flagged so the background AI sweep never touches it.
+    if (mode == AnalysisMode.none) {
+      MoodAnalysis? manual;
+      String moodStr = '';
+      if (_manualScore != null) {
+        final emoji = _emojiForScore(_manualScore!);
+        manual = MoodAnalysis(
+          emoji: emoji,
+          score: _manualScore!,
+          keywords: const [],
+          brief: '',
+          source: AnalysisSource.manual,
+        );
+        moodStr = emoji;
+      }
+      final entry = DiaryEntry(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        text: text,
+        date: DateTime.now(),
+        mood: moodStr,
+        analysis: manual,
+        photoPaths: List.from(_pendingPhotos),
+        skipAutoAnalysis: true,
+      );
+      await DatabaseService.insertEntry(entry);
+      if (!mounted) return;
+      Navigator.pop(context, entry);
+      return;
+    }
+
     MoodAnalysis analysis;
 
     switch (mode) {
+      case AnalysisMode.none:
+        // Handled above; unreachable.
+        return;
       case AnalysisMode.fast:
         analysis = MoodFallback.analyze(text)
             .copyWith(source: AnalysisSource.fast);
@@ -270,6 +329,50 @@ class _EntryScreenState extends State<EntryScreen>
 
     if (!mounted) return;
     Navigator.pop(context, entry);
+  }
+
+  Widget _buildMoodPicker(dynamic t) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Как настроение? (необязательно)',
+            style: TextStyle(color: t.textHint, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: _manualMoods.map((m) {
+              final (score, emoji) = m;
+              final selected = _manualScore == score;
+              return GestureDetector(
+                onTap: () => setState(
+                    () => _manualScore = selected ? null : score),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: selected
+                          ? (t.primary as Color)
+                          : Colors.transparent,
+                      width: 2.5,
+                    ),
+                  ),
+                  child: Opacity(
+                    opacity: (_manualScore == null || selected) ? 1.0 : 0.45,
+                    child: MoodFace(emoji: emoji, score: score, size: 40),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -347,6 +450,7 @@ class _EntryScreenState extends State<EntryScreen>
                   ),
                 ),
               ),
+              if (_mode == AnalysisMode.none) _buildMoodPicker(t),
               if (_pendingPhotos.isNotEmpty)
                 Container(
                   height: 84,
