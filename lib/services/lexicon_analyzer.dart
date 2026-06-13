@@ -200,7 +200,7 @@ class LexiconAnalyzer {
     await ensureLoaded();
 
     // 1. Crisis override layer — keyword based, hardcoded.
-    final crisisHit = _detectCrisis(text);
+    final crisisHit = detectCrisis(text);
     if (crisisHit != null) return crisisHit;
 
     // 2. Tokenize and stem.
@@ -417,7 +417,11 @@ class LexiconAnalyzer {
     'я не справля', 'не могу больше', 'не выдерживаю', 'не вытяну',
   ];
 
-  static MoodAnalysis? _detectCrisis(String text) {
+  /// Hard crisis-safety layer: keyword match for crisis intent. Public so
+  /// the AI analyzers can run it as an override — a neural result must
+  /// never erase a crisis signal the keywords caught. Returns the crisis
+  /// analysis (with helpline) or null.
+  static MoodAnalysis? detectCrisis(String text) {
     final lower = text.toLowerCase().replaceAll('ё', 'е');
     for (final p in _crisisPatterns) {
       if (lower.contains(p.replaceAll('ё', 'е'))) {

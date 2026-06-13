@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/diary_entry.dart';
 import 'database_service.dart';
+import 'lexicon_analyzer.dart';
 import 'secrets.dart';
 
 /// On-device mood analysis via Gemma 3n (MediaPipe LLM Inference).
@@ -353,7 +354,15 @@ class LocalLlmService {
           },
         );
         debugPrint('Local LLM response: $raw');
-        return _parse(raw);
+        final parsed = _parse(raw);
+        // Crisis-safety override: a neural result must never erase a crisis
+        // signal the keyword layer caught (the model isn't trained to flag
+        // it and could soften the score, hiding the helpline).
+        final crisis = LexiconAnalyzer.detectCrisis(text);
+        if (crisis != null) {
+          return crisis.copyWith(source: AnalysisSource.local);
+        }
+        return parsed;
       } finally {
         await session.close();
       }

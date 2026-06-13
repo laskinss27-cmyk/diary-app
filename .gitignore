@@ -67,3 +67,6 @@ desktop.ini
 # secrets.example.dart коммитим как шаблон, secrets.dart — никогда.
 lib/services/secrets.dart
 lib/secrets.dart
+
+# JVM heap dumps from crashed gradle runs
+*.hprof

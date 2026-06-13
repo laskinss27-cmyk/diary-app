@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/diary_entry.dart';
+import 'lexicon_analyzer.dart';
 import 'secrets.dart';
 
 class ApiConfig {
@@ -150,6 +151,11 @@ class GeminiService {
           .replaceAll('```', '')
           .trim();
       final json = jsonDecode(cleaned) as Map<String, dynamic>;
+
+      // Crisis-safety override: the cloud model must not erase a crisis
+      // signal the keyword layer caught.
+      final crisis = LexiconAnalyzer.detectCrisis(text);
+      if (crisis != null) return crisis.copyWith(source: AnalysisSource.ai);
 
       return MoodAnalysis(
         emoji: json['emoji'] as String,
