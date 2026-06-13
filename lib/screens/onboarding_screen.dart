@@ -9,7 +9,15 @@ import '../widgets/disclaimer_dialog.dart';
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;
 
-  const OnboardingScreen({super.key, required this.onComplete});
+  /// Preview mode: opened from Settings just to re-read the tutorial.
+  /// Nothing is saved and the agreement gate is skipped.
+  final bool preview;
+
+  const OnboardingScreen({
+    super.key,
+    required this.onComplete,
+    this.preview = false,
+  });
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -62,7 +70,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _nextPage() {
-    if (_currentPage == 0 && _nameController.text.trim().isEmpty) {
+    if (!widget.preview &&
+        _currentPage == 0 &&
+        _nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Введите ваше имя'),
@@ -85,6 +95,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Future<void> _finish() async {
+    // Preview from Settings: just close, change nothing.
+    if (widget.preview) {
+      widget.onComplete();
+      return;
+    }
     if (!_agreedToTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -154,6 +169,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     children: [
                       _buildWelcomePage(),
                       _buildThemePage(),
+                      _buildAiPage(),
                       _buildNotifPage(),
                       _buildReadyPage(),
                     ],
@@ -172,7 +188,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Widget _buildDots() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(4, (i) {
+      children: List.generate(5, (i) {
         final active = i == _currentPage;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 250),
@@ -358,7 +374,104 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  // Page 3: Notifications
+  // Page 3: How the AI analysis works (heads off "ИИ тупая" — people saw
+  // the instant dictionary result and thought that was the neural net).
+  Widget _buildAiPage() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
+          Icon(Icons.memory_rounded, color: _theme.primary, size: 72),
+          const SizedBox(height: 20),
+          Text(
+            'Умный анализ',
+            style: TextStyle(
+              color: _theme.textPrimary,
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Дневник понимает твои записи нейросетью, которая работает '
+            'прямо на телефоне — тексты никуда не отправляются.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: _theme.textHint, fontSize: 15, height: 1.4),
+          ),
+          const SizedBox(height: 24),
+          _aiStep('📖', 'Сразу',
+              'Запись сохраняется мгновенно с быстрым анализом по словарю.'),
+          _aiStep('🧠', 'Через минуту',
+              'Нейросеть уточняет его сама — оценка и слова могут измениться. Так и задумано, это не сбой.'),
+          _aiStep('📥', 'Один раз',
+              'Чтобы включить нейросеть, нужно скачать её модель (~3 ГБ, лучше по Wi-Fi) в Настройках.'),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _theme.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline_rounded,
+                    size: 16, color: _theme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Ускорение на GPU по умолчанию выключено — на части '
+                    'телефонов оно нестабильно. Включить можно в настройках.',
+                    style: TextStyle(
+                        color: _theme.textSecondary,
+                        fontSize: 12,
+                        height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _aiStep(String emoji, String title, String body) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 22)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: _theme.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  body,
+                  style: TextStyle(
+                      color: _theme.textHint, fontSize: 13, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Page 4: Notifications
   Widget _buildNotifPage() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -622,7 +735,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             const SizedBox(width: 80),
           const Spacer(),
           ElevatedButton(
-            onPressed: _currentPage == 3 ? _finish : _nextPage,
+            onPressed: _currentPage == 4 ? _finish : _nextPage,
             style: ElevatedButton.styleFrom(
               backgroundColor: _theme.primary,
               foregroundColor: Colors.white,
@@ -633,7 +746,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               elevation: 2,
             ),
             child: Text(
-              _currentPage == 3 ? 'Начать' : 'Далее',
+              _currentPage == 4 ? 'Начать' : 'Далее',
               style:
                   const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),

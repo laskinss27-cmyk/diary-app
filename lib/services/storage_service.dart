@@ -134,6 +134,13 @@ class StorageService {
     await prefs.setBool(_onboardedKey, true);
   }
 
+  /// Clears the onboarding flag so the tutorial shows again on next launch.
+  /// Entries, profile and settings are untouched.
+  static Future<void> resetOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_onboardedKey);
+  }
+
   // --- Last open timestamp (for contextual greetings) ---
 
   /// Returns the last time the home screen was opened, or null if it's the

@@ -15,6 +15,7 @@ import '../widgets/avatar_picker.dart';
 import '../widgets/city_autocomplete.dart';
 import '../widgets/disclaimer_dialog.dart';
 import 'achievements_screen.dart';
+import 'onboarding_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -1097,6 +1098,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icon(Icons.picture_as_pdf_rounded,
                       color: t.primary, size: 20),
                   label: Text('Экспорт в PDF',
+                      style: TextStyle(color: t.textSecondary)),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: t.primary.withValues(alpha: 0.3)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 16),
+
+            // --- Обучение ---
+            _card(children: [
+              Text('Обучение',
+                  style: TextStyle(
+                      color: t.textSecondary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16)),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (ctx) => OnboardingScreen(
+                        preview: true,
+                        onComplete: () => Navigator.pop(ctx),
+                      ),
+                    ),
+                  ),
+                  icon: Icon(Icons.school_rounded, color: t.primary, size: 20),
+                  label: Text('Посмотреть обучение',
                       style: TextStyle(color: t.textSecondary)),
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(color: t.primary.withValues(alpha: 0.3)),
