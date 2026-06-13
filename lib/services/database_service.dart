@@ -1,11 +1,17 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import '../models/diary_entry.dart';
 
 class DatabaseService {
   static Database? _db;
+
+  /// Ticks whenever entries change (insert/update/delete). Open screens
+  /// listen and reload so a background AI upgrade shows up live, without
+  /// needing to leave and re-enter the screen.
+  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
+  static void _bumpRevision() => revision.value++;
 
   static Future<Database> get database async {
     if (_db != null) return _db!;
@@ -87,17 +93,20 @@ class DatabaseService {
     final db = await database;
     await db.insert('entries', _entryToMap(entry),
         conflictAlgorithm: ConflictAlgorithm.replace);
+    _bumpRevision();
   }
 
   static Future<void> updateEntry(DiaryEntry entry) async {
     final db = await database;
     await db.update('entries', _entryToMap(entry),
         where: 'id = ?', whereArgs: [entry.id]);
+    _bumpRevision();
   }
 
   static Future<void> deleteEntry(String id) async {
     final db = await database;
     await db.delete('entries', where: 'id = ?', whereArgs: [id]);
+    _bumpRevision();
   }
 
   static Future<void> importEntries(List<DiaryEntry> entries) async {

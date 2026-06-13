@@ -2,11 +2,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../main.dart';
 import '../models/diary_entry.dart';
+import '../services/database_service.dart';
+import '../widgets/analysis_badge.dart';
 import '../widgets/frosted_background.dart';
 import '../widgets/mood_badge.dart';
 
-/// Read-only full-screen view of a diary entry.
-class EntryDetailScreen extends StatelessWidget {
+/// Read-only full-screen view of a diary entry. Listens for DB changes so a
+/// background AI upgrade shows up live while the entry is open.
+class EntryDetailScreen extends StatefulWidget {
   final DiaryEntry entry;
   final VoidCallback? onDelete;
 
@@ -15,6 +18,31 @@ class EntryDetailScreen extends StatelessWidget {
     required this.entry,
     this.onDelete,
   });
+
+  @override
+  State<EntryDetailScreen> createState() => _EntryDetailScreenState();
+}
+
+class _EntryDetailScreenState extends State<EntryDetailScreen> {
+  late DiaryEntry entry = widget.entry;
+
+  @override
+  void initState() {
+    super.initState();
+    DatabaseService.revision.addListener(_reload);
+  }
+
+  @override
+  void dispose() {
+    DatabaseService.revision.removeListener(_reload);
+    super.dispose();
+  }
+
+  Future<void> _reload() async {
+    final all = await DatabaseService.loadEntries();
+    final fresh = all.where((e) => e.id == widget.entry.id).firstOrNull;
+    if (fresh != null && mounted) setState(() => entry = fresh);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +60,7 @@ class EntryDetailScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          if (onDelete != null)
+          if (widget.onDelete != null)
             IconButton(
               icon: Icon(Icons.delete_outline_rounded, color: t.textHint),
               onPressed: () => _confirmDelete(context),
@@ -53,12 +81,18 @@ class EntryDetailScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _formatDate(entry.date),
-                          style: TextStyle(
-                            color: t.textHint,
-                            fontSize: 12,
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                              _formatDate(entry.date),
+                              style: TextStyle(
+                                color: t.textHint,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            AnalysisBadge(source: entry.analysis?.source),
+                          ],
                         ),
                         if (entry.analysis != null) ...[
                           const SizedBox(height: 2),
@@ -191,7 +225,7 @@ class EntryDetailScreen extends StatelessWidget {
             onPressed: () {
               Navigator.pop(ctx);
               Navigator.pop(context);
-              onDelete?.call();
+              widget.onDelete?.call();
             },
             style: TextButton.styleFrom(
               foregroundColor: const Color(0xFFE94560),

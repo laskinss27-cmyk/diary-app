@@ -4,6 +4,8 @@ import '../models/diary_entry.dart';
 import '../services/achievements_service.dart';
 import '../services/storage_service.dart';
 import '../services/database_service.dart';
+import '../services/analysis_mode.dart';
+import '../services/local_llm_service.dart';
 import '../widgets/achievement_unlock_dialog.dart';
 import 'dart:ui';
 import '../widgets/avatar_picker.dart';
@@ -33,18 +35,40 @@ class _HomeScreenState extends State<HomeScreen> {
   String _userName = '';
   AvatarData _avatar = AvatarData.defaultAvatar;
   WelcomeContext? _welcomeContext;
+  bool _aiActive = false; // AI mode on AND model ready → entries will upgrade
   late final DateTime _openedAt = DateTime.now();
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    // Live-refresh when a background AI pass updates an entry.
+    DatabaseService.revision.addListener(_onDbChanged);
+  }
+
+  @override
+  void dispose() {
+    DatabaseService.revision.removeListener(_onDbChanged);
+    super.dispose();
+  }
+
+  void _onDbChanged() {
+    if (mounted) _reloadEntries();
+  }
+
+  Future<void> _reloadEntries() async {
+    final loaded = await StorageService.loadEntries();
+    if (!mounted) return;
+    setState(() => _entries = loaded);
   }
 
   Future<void> _loadData() async {
     final loaded = await StorageService.loadEntries();
     final profile = await StorageService.loadProfile();
     final avatar = await StorageService.loadAvatar();
+    final mode = await AnalysisModeStore.load();
+    final aiActive = mode == AnalysisMode.local &&
+        await LocalLlmService.isModelReady();
     WelcomeContext? ctx = _welcomeContext;
     final firstLoad = ctx == null;
     if (firstLoad) {
@@ -57,6 +81,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _userName = profile['name'] ?? '';
       _avatar = avatar;
       _welcomeContext = ctx;
+      _aiActive = aiActive;
     });
     if (firstLoad) _checkForUpdate();
   }
@@ -265,18 +290,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: 'Сегодня',
                     entries: grouped.today,
                     onDelete: _deleteEntry,
+                    aiActive: _aiActive,
                   ),
                 if (grouped.yesterday.isNotEmpty)
                   EntrySection(
                     title: 'Вчера',
                     entries: grouped.yesterday,
                     onDelete: _deleteEntry,
+                    aiActive: _aiActive,
                   ),
                 if (grouped.earlier.isNotEmpty)
                   EntrySection(
                     title: 'Ранее',
                     entries: grouped.earlier,
                     onDelete: _deleteEntry,
+                    aiActive: _aiActive,
                   ),
               ],
             ],

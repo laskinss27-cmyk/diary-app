@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../models/diary_entry.dart';
 import '../screens/entry_detail_screen.dart';
+import 'analysis_badge.dart';
 import 'mood_badge.dart';
 
 /// Collapsible "Сегодня / Вчера / Ранее" group.
@@ -12,12 +13,14 @@ class EntrySection extends StatefulWidget {
   final String title;
   final List<DiaryEntry> entries;
   final void Function(String id) onDelete;
+  final bool aiActive;
 
   const EntrySection({
     super.key,
     required this.title,
     required this.entries,
     required this.onDelete,
+    this.aiActive = false,
   });
 
   @override
@@ -139,6 +142,13 @@ class _EntrySectionState extends State<EntrySection>
 
   Widget _entryRow(BuildContext context, t, DiaryEntry e) {
     final score = e.analysis?.score ?? 5;
+    final src = e.analysis?.source;
+    // An entry still on the dictionary, while the on-device AI is active,
+    // is about to be upgraded — show the pulsing "анализ ИИ…" badge.
+    final pending = widget.aiActive &&
+        (src == null ||
+            src == AnalysisSource.lexicon ||
+            src == AnalysisSource.fast);
     return InkWell(
       onTap: () => Navigator.push(
         context,
@@ -163,6 +173,8 @@ class _EntrySectionState extends State<EntrySection>
                 fontWeight: FontWeight.w500,
               ),
             ),
+            const SizedBox(width: 10),
+            AnalysisBadge(source: src, pending: pending),
             const Spacer(),
             Icon(
               Icons.chevron_right_rounded,
