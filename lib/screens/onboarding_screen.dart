@@ -406,32 +406,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               'Нейросеть уточняет его сама — оценка и слова могут измениться. Так и задумано, это не сбой.'),
           _aiStep('📥', 'Один раз',
               'Чтобы включить нейросеть, нужно скачать её модель (~3 ГБ, лучше по Wi-Fi) в Настройках.'),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _theme.primary.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.info_outline_rounded,
-                    size: 16, color: _theme.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Ускорение на GPU по умолчанию выключено — на части '
-                    'телефонов оно нестабильно. Включить можно в настройках.',
-                    style: TextStyle(
-                        color: _theme.textSecondary,
-                        fontSize: 12,
-                        height: 1.4),
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );

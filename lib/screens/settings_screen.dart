@@ -54,7 +54,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _modelDownloading = false;
   double _modelProgress = 0;
   String? _modelError;
-  bool _llmUseGpu = false;
 
   @override
   void initState() {
@@ -76,11 +75,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final mode = await AnalysisModeStore.load();
     final modelReady = await LocalLlmService.isModelReady();
     final hfToken = await LocalLlmService.loadToken();
-    final llmUseGpu = await LocalLlmService.useGpu();
 
     setState(() {
       _modelReady = modelReady;
-      _llmUseGpu = llmUseGpu;
       if (hfToken != null) _hfTokenController.text = hfToken;
       _avatar = avatar;
       _notifEnabled = notifSettings.enabled;
@@ -625,38 +622,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Ускорение на GPU (экспериментально)',
-                            style: TextStyle(
-                                color: t.textPrimary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600),
-                          ),
-                          Text(
-                            'На некоторых телефонах может зависнуть — тогда перезагрузи и выключи',
-                            style:
-                                TextStyle(color: t.textHint, fontSize: 11),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: _llmUseGpu,
-                      onChanged: (v) async {
-                        setState(() => _llmUseGpu = v);
-                        await LocalLlmService.setUseGpu(v);
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(

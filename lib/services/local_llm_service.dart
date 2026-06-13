@@ -33,7 +33,6 @@ class LocalLlmService {
 
   static const _hfTokenKey = 'hf_token';
   static const _totalBytesKey = 'gemma_model_total_bytes';
-  static const _gpuKey = 'llm_use_gpu';
 
   /// A file below this size is clearly not the real model.
   static const _minValidBytes = 2500 * 1024 * 1024;
@@ -81,21 +80,6 @@ class LocalLlmService {
   static Future<void> saveToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_hfTokenKey, token.trim());
-  }
-
-  static Future<bool> useGpu() async {
-    final prefs = await SharedPreferences.getInstance();
-    // Default CPU: GPU inference froze the whole phone on Mali-G57
-    // (Redmi Note 11S, 2026-06-13). Opt-in only.
-    return prefs.getBool(_gpuKey) ?? false;
-  }
-
-  static Future<void> setUseGpu(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_gpuKey, value);
-    // Reload the model with the new backend on next analysis.
-    await dispose();
-    _initFailed = false;
   }
 
   // ---------------------------------------------------------------- specs
@@ -283,23 +267,16 @@ class LocalLlmService {
       }
       if (spec == null) return null;
       manager.setActiveModel(spec);
-      final gpu = await useGpu();
-      try {
-        _model = await gemma.createModel(
-          modelType: ModelType.gemmaIt,
-          maxTokens: 1024,
-          preferredBackend: gpu ? PreferredBackend.gpu : PreferredBackend.cpu,
-        );
-      } catch (e) {
-        if (!gpu) rethrow;
-        // GPU refused — one retry on CPU before giving up.
-        debugPrint('Local LLM GPU init failed, retrying on CPU: $e');
-        _model = await gemma.createModel(
-          modelType: ModelType.gemmaIt,
-          maxTokens: 1024,
-          preferredBackend: PreferredBackend.cpu,
-        );
-      }
+      // CPU only. GPU (PreferredBackend.gpu) was tested on 4 phones: it
+      // either froze the device (Mali — Helio G96, Tensor) or hard-crashed
+      // the app natively (Adreno 610 — SD680), and the native crash can't
+      // be caught in Dart to fall back. Not worth a setting. If MediaPipe
+      // ever fixes GPU on Android, flip this back.
+      _model = await gemma.createModel(
+        modelType: ModelType.gemmaIt,
+        maxTokens: 1024,
+        preferredBackend: PreferredBackend.cpu,
+      );
       return _model;
     } catch (e) {
       debugPrint('Local LLM init failed: $e');
