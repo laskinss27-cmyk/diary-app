@@ -22,6 +22,9 @@ import 'secrets.dart';
 /// The finished file is then registered with the plugin in place, no copy.
 /// Models already downloaded through the plugin keep working as-is.
 class LocalLlmService {
+  // Gemma 3n E2B (~2.9 GB): reliably writes the warm brief. 1B was ~6x
+  // lighter and faster (~10s) but kept dropping the brief sentence — the
+  // heart of the analysis — so we stay on E2B. 2026-06-13.
   static const modelFileName = 'gemma-3n-E2B-it-int4.task';
 
   static const defaultModelUrl =
@@ -37,9 +40,9 @@ class LocalLlmService {
   /// Abort the download if no bytes arrive for this long.
   static const _stallTimeout = Duration(seconds: 30);
 
-  // Compact prompt — same JSON contract as the cloud analyzer, trimmed for
-  // a small on-device model. Keywords capped at 3 and brief kept short to
-  // cut decode time on slow phone CPUs.
+  // Prompt for Gemma 3n E2B — warm, impersonal brief, same JSON contract
+  // as the cloud analyzer. (A few-shot variant was tried for the 1B test;
+  // reverted with the model.)
   static const _prompt = '''
 Ты — тёплый внимательный помощник в личном дневнике. Определи эмоциональное состояние в записи: контекст, скрытые эмоции, тревогу, радость, грусть, злость.
 
@@ -283,7 +286,7 @@ class LocalLlmService {
       try {
         _model = await gemma.createModel(
           modelType: ModelType.gemmaIt,
-          maxTokens: 2048,
+          maxTokens: 1024,
           preferredBackend: gpu ? PreferredBackend.gpu : PreferredBackend.cpu,
         );
       } catch (e) {
@@ -292,7 +295,7 @@ class LocalLlmService {
         debugPrint('Local LLM GPU init failed, retrying on CPU: $e');
         _model = await gemma.createModel(
           modelType: ModelType.gemmaIt,
-          maxTokens: 2048,
+          maxTokens: 1024,
           preferredBackend: PreferredBackend.cpu,
         );
       }
@@ -339,7 +342,16 @@ class LocalLlmService {
         await session.addQueryChunk(
           Message.text(text: '$_prompt$text', isUser: true),
         );
-        final raw = await session.getResponse();
+        // Plain await with a generous timeout backstop. (Streaming early-stop
+        // was tried for the 1B test but tripped MediaPipe's "previous
+        // invocation still processing" — reverted with the model.)
+        final raw = await session.getResponse().timeout(
+          const Duration(seconds: 120),
+          onTimeout: () {
+            debugPrint('Local LLM timed out — falling back to lexicon');
+            return '';
+          },
+        );
         debugPrint('Local LLM response: $raw');
         return _parse(raw);
       } finally {

@@ -1,18 +1,20 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../models/diary_entry.dart';
+import '../models/sky_config.dart';
+import '../screens/sky_studio_screen.dart';
 
-/// Animated sky card built from Sergey's art (assets/sky): the weather
-/// mirrors the latest entry's mood, the palette follows the real time of
-/// day. Clouds drift seamlessly, the sun breathes, rain falls softly,
-/// stars twinkle at night. Gradient, stars and rain are painted; sun,
-/// moon and clouds are images.
-enum SkyWeather { dawn, sunny, partly, cloudy, rain }
+/// Animated sky card built from Sergey's art (assets/sky). Weather mirrors
+/// the latest entry's mood; palette follows the real time of day. Clouds
+/// are generated procedurally from a [SkyWeatherConfig] (count + size and
+/// height ranges) so the Sky Studio can tune everything with a few sliders.
+/// Long-press the card to open the studio.
+enum SkyWeather { sunny, partly, cloudy, rain }
 
 enum DayPhase { morning, day, evening, night }
 
 SkyWeather computeWeather(List<DiaryEntry> entries) {
-  if (entries.isEmpty) return SkyWeather.dawn;
+  if (entries.isEmpty) return SkyWeather.partly;
   final score = entries.first.analysis?.score ?? 5;
   if (score >= 8) return SkyWeather.sunny;
   if (score >= 6) return SkyWeather.partly;
@@ -27,8 +29,12 @@ DayPhase phaseForHour(int hour) {
   return DayPhase.night;
 }
 
-/// (asset, laps per master cycle, vertical position, width, opacity)
-typedef _CloudSpec = (String, int, double, double, double);
+SkyWeatherConfig defaultConfigFor(SkyWeather w) => switch (w) {
+      SkyWeather.sunny => SkyDefaults.sunny,
+      SkyWeather.partly => SkyDefaults.partly,
+      SkyWeather.cloudy => SkyDefaults.cloudy,
+      SkyWeather.rain => SkyDefaults.rain,
+    };
 
 class MoodSky extends StatefulWidget {
   final List<DiaryEntry> entries;
@@ -38,18 +44,56 @@ class MoodSky extends StatefulWidget {
   State<MoodSky> createState() => _MoodSkyState();
 }
 
-class _MoodSkyState extends State<MoodSky>
-    with SingleTickerProviderStateMixin {
+class _MoodSkyState extends State<MoodSky> {
+  @override
+  Widget build(BuildContext context) {
+    final weather = computeWeather(widget.entries);
+    final phase = phaseForHour(DateTime.now().hour);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: GestureDetector(
+        onLongPress: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SkyStudioScreen()),
+        ),
+        child: SkyView(
+          weather: weather,
+          phase: phase,
+          config: defaultConfigFor(weather),
+        ),
+      ),
+    );
+  }
+}
+
+/// The actual rendered sky. Stateless w.r.t. its inputs so the Sky Studio
+/// can drive it live with arbitrary weather/phase/config.
+class SkyView extends StatefulWidget {
+  final SkyWeather weather;
+  final DayPhase phase;
+  final SkyWeatherConfig config;
+  final double height;
+  const SkyView({
+    super.key,
+    required this.weather,
+    required this.phase,
+    required this.config,
+    this.height = 124,
+  });
+
+  @override
+  State<SkyView> createState() => _SkyViewState();
+}
+
+class _SkyViewState extends State<SkyView> with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    // One long master cycle; every periodic motion inside uses an INTEGER
-    // number of laps per cycle, otherwise it teleports on loop wrap.
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 240),
+      duration: Duration(seconds: SkyDefaults.cycleSeconds),
     )..repeat();
   }
 
@@ -59,216 +103,115 @@ class _MoodSkyState extends State<MoodSky>
     super.dispose();
   }
 
-  String _title(SkyWeather w, bool night) => switch (w) {
-        SkyWeather.dawn => night ? 'Ночь перед рассветом' : 'Рассвет',
-        SkyWeather.sunny => night ? 'Ясная ночь' : 'Солнечно',
-        SkyWeather.partly =>
-          night ? 'Луна за облачком' : 'Солнце за облачком',
-        SkyWeather.cloudy => night ? 'Облачная ночь' : 'Облачно',
-        SkyWeather.rain => night ? 'Ночной дождь' : 'Тихий дождь',
-      };
-
-  String _subtitle(SkyWeather w, bool night) => switch (w) {
-        SkyWeather.dawn => 'Первая запись — первый луч.',
-        SkyWeather.sunny => night
-            ? 'Тихо, спокойно. Звёзды на месте.'
-            : 'Внутри светло — пусть подольше.',
-        SkyWeather.partly =>
-          night ? 'Мягкая ночь.' : 'Спокойный, ровный день.',
-        SkyWeather.cloudy => 'Небо ждёт, когда развиднеется.',
-        SkyWeather.rain => 'Дождь заканчивается. Всегда.',
-      };
-
-  List<_CloudSpec> _cloudSpecs(SkyWeather w) => switch (w) {
-        SkyWeather.sunny ||
-        SkyWeather.dawn =>
-          const [('cloud1', 1, 0.20, 104.0, 0.85)],
-        SkyWeather.partly => const [
-            ('cloud2', 1, 0.06, 148.0, 0.92),
-            ('cloud1', 2, 0.44, 112.0, 0.95),
-          ],
-        SkyWeather.cloudy => const [
-            ('cloud2', 1, 0.02, 168.0, 0.95),
-            ('dark2', 2, 0.30, 150.0, 0.85),
-            ('cloud1', 3, 0.52, 116.0, 0.92),
-          ],
-        SkyWeather.rain => const [
-            ('dark2', 1, 0.02, 168.0, 0.92),
-            ('dark1', 2, 0.18, 150.0, 0.95),
-            ('dark2', 3, 0.42, 128.0, 0.80),
-          ],
-      };
+  // Stable pseudo-random in 0..1 per (index, salt).
+  double _rand(int i, int salt) {
+    final v = math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
+    return v - v.floorToDouble();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final weather = computeWeather(widget.entries);
-    final phase = phaseForHour(DateTime.now().hour);
-    final night = phase == DayPhase.night;
-    final textColor = night ? Colors.white : const Color(0xFF3A4A5A);
-    final subColor = night
-        ? Colors.white.withValues(alpha: 0.75)
-        : const Color(0xFF3A4A5A).withValues(alpha: 0.7);
-    // At night the white clouds get dimmed to grey by a dark tint.
-    final nightTint = night ? Colors.black.withValues(alpha: 0.38) : null;
+    final night = widget.phase == DayPhase.night;
+    final cfg = widget.config;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          height: 122,
-          foregroundDecoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: night ? 0.18 : 0.55),
-              width: 1,
-            ),
+    final ColorFilter? cloudTint = widget.weather == SkyWeather.rain
+        ? ColorFilter.mode(
+            night ? const Color(0xFF4A4A5E) : const Color(0xFF8C97A6),
+            BlendMode.modulate)
+        : (night
+            ? const ColorFilter.mode(Color(0xFF6E6E86), BlendMode.modulate)
+            : null);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        height: widget.height,
+        foregroundDecoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: night ? 0.18 : 0.5),
+            width: 1,
           ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final w = constraints.maxWidth;
-              final h = constraints.maxHeight;
-              return AnimatedBuilder(
-                animation: _ctrl,
-                builder: (context, _) {
-                  final t = _ctrl.value;
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final w = constraints.maxWidth;
+            final h = constraints.maxHeight;
+            return AnimatedBuilder(
+              animation: _ctrl,
+              builder: (context, _) {
+                final t = _ctrl.value;
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CustomPaint(
+                      painter: _SkyBackPainter(
+                          phase: widget.phase, gloom: cfg.gloom, t: t),
+                    ),
+                    _celestial(night, cfg, t, w, h),
+                    ..._clouds(cfg, cloudTint, t, w, h),
+                    if (cfg.rainDrops > 0)
                       CustomPaint(
-                        painter: _SkyBackPainter(
-                          weather: weather,
-                          phase: phase,
-                          t: t,
-                        ),
+                        painter: _RainPainter(
+                            t: t, night: night, drops: cfg.rainDrops),
                       ),
-                      ..._celestial(weather, night, t, h),
-                      ..._clouds(weather, night, nightTint, t, w, h),
-                      if (weather == SkyWeather.rain)
-                        CustomPaint(
-                          painter: _RainPainter(t: t, night: night),
-                        ),
-                      Positioned(
-                        left: 16,
-                        top: 0,
-                        bottom: 0,
-                        right: 104,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _title(weather, night),
-                              style: TextStyle(
-                                color: textColor,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                height: 1.2,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _subtitle(weather, night),
-                              style: TextStyle(
-                                color: subColor,
-                                fontSize: 12,
-                                height: 1.35,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              );
-            },
-          ),
+                  ],
+                );
+              },
+            );
+          },
         ),
       ),
     );
   }
 
-  List<Widget> _celestial(
-      SkyWeather weather, bool night, double t, double h) {
-    final hasCelestial = weather == SkyWeather.sunny ||
-        weather == SkyWeather.partly ||
-        weather == SkyWeather.dawn;
-    if (!hasCelestial) return const [];
-
+  Widget _celestial(bool night, SkyWeatherConfig cfg, double t, double w,
+      double h) {
+    final cx = w - 52;
+    final cy = h * 0.34;
     if (night) {
-      // The moon floats very slightly (2 laps per cycle = 120 s period).
       final bob = 2.5 * math.sin(t * 2 * math.pi * 2);
-      return [
-        Positioned(
-          right: 22,
-          top: (weather == SkyWeather.dawn ? h - 38 : 12) + bob,
-          child: Image.asset(
-            'assets/sky/moon.png',
-            width: 56,
-            height: 56,
-            fit: BoxFit.contain,
-          ),
-        ),
-      ];
+      final m = SkyDefaults.moonSize;
+      return Positioned(
+        left: cx - m / 2,
+        top: cy - m / 2 + bob,
+        child: Image.asset('assets/sky/moon.png',
+            width: m, height: m, fit: BoxFit.contain),
+      );
     }
-
-    // 24 laps per cycle = one soft breath every 10 seconds.
     final pulse = 1 + 0.04 * math.sin(t * 2 * math.pi * 24);
-    final dawn = weather == SkyWeather.dawn;
-    return [
-      Positioned(
-        right: dawn ? 28 : 14,
-        top: dawn ? h - 46 : 4,
+    final size = SkyDefaults.celestialSize;
+    return Positioned(
+      left: cx - size / 2,
+      top: cy - size / 2,
+      child: Opacity(
+        opacity: cfg.sunOpacity,
         child: Transform.scale(
           scale: pulse,
-          child: Image.asset(
-            'assets/sky/sun.png',
-            width: dawn ? 96 : 88,
-            height: dawn ? 96 : 88,
-            fit: BoxFit.contain,
-          ),
+          child: Image.asset('assets/sky/sun.png',
+              width: size, height: size, fit: BoxFit.contain),
         ),
       ),
-    ];
+    );
   }
 
-  List<Widget> _clouds(SkyWeather weather, bool night, Color? nightTint,
-      double t, double w, double h) {
-    final specs = _cloudSpecs(weather);
+  List<Widget> _clouds(
+      SkyWeatherConfig cfg, ColorFilter? tint, double t, double w, double h) {
+    final n = cfg.cloudCount;
     final clouds = <Widget>[];
-    for (final (i, (asset, laps, topFrac, cw, opacity))
-        in specs.indexed) {
-      // INTEGER laps per master cycle — seamless loop, no teleports.
-      final x = ((t * laps + i * 0.37) % 1.0) * (w + cw * 2) - cw;
+    for (int i = 0; i < n; i++) {
+      final cw = cfg.sizeMin + _rand(i, 1) * (cfg.sizeMax - cfg.sizeMin);
+      final topFrac = cfg.topMin + _rand(i, 2) * (cfg.topMax - cfg.topMin);
+      final asset = i.isEven ? 'cloud1' : 'cloud2';
+      // Evenly phased + shared speed = a steady caravan, never a gap.
+      final ph = (t + (n == 0 ? 0 : i / n)) % 1.0;
+      final x = ph * (w + cw * 2) - cw;
+      Widget img = Image.asset('assets/sky/$asset.png', width: cw);
+      if (tint != null) img = ColorFiltered(colorFilter: tint, child: img);
       clouds.add(Positioned(
         left: x,
         top: h * topFrac,
-        child: Opacity(
-          opacity: opacity,
-          child: Image.asset(
-            'assets/sky/$asset.png',
-            width: cw,
-            color: nightTint,
-            colorBlendMode: nightTint != null ? BlendMode.srcATop : null,
-          ),
-        ),
-      ));
-    }
-    // Partly: one cloud parked over the sun/moon.
-    if (weather == SkyWeather.partly) {
-      clouds.add(Positioned(
-        right: -8,
-        top: h * 0.34,
-        child: Opacity(
-          opacity: 0.96,
-          child: Image.asset(
-            'assets/sky/cloud1.png',
-            width: 116,
-            color: nightTint,
-            colorBlendMode: nightTint != null ? BlendMode.srcATop : null,
-          ),
-        ),
+        child: Opacity(opacity: cfg.cloudOpacity, child: img),
       ));
     }
     return clouds;
@@ -276,15 +219,15 @@ class _MoodSkyState extends State<MoodSky>
 }
 
 class _SkyBackPainter extends CustomPainter {
-  final SkyWeather weather;
   final DayPhase phase;
+  final double gloom;
   final double t;
 
-  _SkyBackPainter({required this.weather, required this.phase, required this.t});
+  _SkyBackPainter({required this.phase, required this.gloom, required this.t});
 
   static const _palettes = {
     DayPhase.morning: (Color(0xFFFFD9A8), Color(0xFFBFE8F5)),
-    DayPhase.day: (Color(0xFF9ED4F2), Color(0xFFDCF1FB)),
+    DayPhase.day: (Color(0xFF8EC9F0), Color(0xFFDCF1FB)),
     DayPhase.evening: (Color(0xFFC9A8E8), Color(0xFFFFC9A8)),
     DayPhase.night: (Color(0xFF2B2B52), Color(0xFF4A4A7A)),
   };
@@ -296,13 +239,8 @@ class _SkyBackPainter extends CustomPainter {
     final night = phase == DayPhase.night;
 
     var (top, bottom) = _palettes[phase]!;
-    final gloom = switch (weather) {
-      SkyWeather.cloudy => 0.22,
-      SkyWeather.rain => 0.38,
-      _ => 0.0,
-    };
     if (gloom > 0) {
-      final grey = night ? const Color(0xFF26263A) : const Color(0xFF9FAAB5);
+      final grey = night ? const Color(0xFF26263A) : const Color(0xFFA8B2BD);
       top = Color.lerp(top, grey, gloom)!;
       bottom = Color.lerp(bottom, grey, gloom)!;
     }
@@ -317,48 +255,56 @@ class _SkyBackPainter extends CustomPainter {
     );
 
     if (night) {
-      const stars = 16;
+      const stars = 18;
       for (int i = 0; i < stars; i++) {
         final x = (i * 137 % 100) / 100 * w;
-        final y = (i * 71 % 60) / 100 * h;
-        // 48 laps per cycle = a twinkle every 5 seconds.
+        final y = (i * 71 % 55) / 100 * h;
         final tw = 0.45 + 0.45 * math.sin(t * 2 * math.pi * 48 + i * 1.7);
-        canvas.drawCircle(
-          Offset(x, y),
-          i % 3 == 0 ? 1.5 : 1.0,
-          Paint()..color = Colors.white.withValues(alpha: tw),
-        );
+        canvas.drawCircle(Offset(x, y), i % 3 == 0 ? 1.5 : 1.0,
+            Paint()..color = Colors.white.withValues(alpha: tw));
       }
     }
   }
 
   @override
   bool shouldRepaint(covariant _SkyBackPainter old) =>
-      old.t != t || old.weather != weather || old.phase != phase;
+      old.t != t || old.phase != phase || old.gloom != gloom;
 }
 
+/// Soft scattered rain: each drop has its own column, length, speed and
+/// opacity, so it reads as falling rain, not a marching row of dashes.
 class _RainPainter extends CustomPainter {
   final double t;
   final bool night;
+  final int drops;
 
-  _RainPainter({required this.t, required this.night});
+  _RainPainter({required this.t, required this.night, required this.drops});
+
+  double _rand(int i, int salt) {
+    final v = math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
+    return v - v.floorToDouble();
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final drop = Paint()
-      ..color = (night ? const Color(0xFF8FA8D8) : const Color(0xFF7C96B8))
-          .withValues(alpha: 0.55)
-      ..strokeWidth = 1.6
-      ..strokeCap = StrokeCap.round;
-    const drops = 14;
+    final base = night ? const Color(0xFFAFC2E8) : const Color(0xFF8AA2C4);
     for (int i = 0; i < drops; i++) {
-      final x = (i * 73 % 100) / 100 * w;
-      // 120 laps per cycle = a drop falls through in 2 seconds.
-      final fall = ((t * 120 + i * 0.13) % 1.0);
-      final y = fall * (h + 20) - 10;
-      canvas.drawLine(Offset(x, y), Offset(x - 1.5, y + 7), drop);
+      final x = _rand(i, 1) * w;
+      final len = 6 + _rand(i, 2) * 9;
+      final speed = 60 + _rand(i, 3) * 80;
+      final alpha = 0.25 + _rand(i, 4) * 0.4;
+      final phase = (t * speed + _rand(i, 5)) % 1.0;
+      final y = phase * (h + len * 2) - len;
+      canvas.drawLine(
+        Offset(x, y),
+        Offset(x - 1.2, y + len),
+        Paint()
+          ..color = base.withValues(alpha: alpha)
+          ..strokeWidth = 1.3
+          ..strokeCap = StrokeCap.round,
+      );
     }
   }
 
