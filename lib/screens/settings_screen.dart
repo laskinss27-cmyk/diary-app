@@ -1181,9 +1181,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _modeOption(AnalysisMode mode) {
     final isSelected = _analysisMode == mode;
     final icon = switch (mode) {
-      AnalysisMode.fast => Icons.flash_on_rounded,
+      AnalysisMode.fast => Icons.bolt_rounded,
       AnalysisMode.lexicon => Icons.menu_book_rounded,
-      AnalysisMode.ai => Icons.auto_awesome_rounded,
+      AnalysisMode.ai => Icons.cloud_rounded,
       AnalysisMode.local => Icons.memory_rounded,
       AnalysisMode.none => Icons.do_not_disturb_on_outlined,
     };

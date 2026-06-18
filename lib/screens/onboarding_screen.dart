@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../main.dart';
 import '../models/app_theme.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
@@ -117,6 +118,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
     await StorageService.saveAvatar(_avatar);
     await StorageService.saveThemeId(_selectedThemeId);
+    // Apply the chosen theme to the live notifier too — otherwise it only
+    // takes effect after an app restart (saved to prefs but not in memory).
+    await DiaryApp.themeNotifier.setTheme(_selectedThemeId);
     await StorageService.setOnboarded();
 
     // Set up notifications. Wrapped in try/catch so a permission denial or

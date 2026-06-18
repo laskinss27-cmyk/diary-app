@@ -34,6 +34,17 @@ class AvatarData {
     value: '🌸',
     backgroundColor: Color(0xFFE8A0BF),
   );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AvatarData &&
+          other.type == type &&
+          other.value == value &&
+          other.backgroundColor == backgroundColor;
+
+  @override
+  int get hashCode => Object.hash(type, value, backgroundColor);
 }
 
 extension ColorHex on Color {
@@ -77,12 +88,31 @@ class _AvatarPickerState extends State<AvatarPicker> {
   @override
   void initState() {
     super.initState();
-    _selectedEmoji = widget.current.type == 'preset' ? widget.current.value : '🌸';
+    _applyCurrent();
+  }
+
+  // The parent (Settings) loads the saved avatar asynchronously and then
+  // rebuilds with a new `current`. Without this the picker keeps the
+  // initState snapshot (default) and shows the wrong avatar — the user had
+  // to re-pick everything. Sync internal state when `current` changes.
+  @override
+  void didUpdateWidget(AvatarPicker old) {
+    super.didUpdateWidget(old);
+    if (widget.current != old.current) _applyCurrent();
+  }
+
+  void _applyCurrent() {
+    _selectedEmoji =
+        widget.current.type == 'preset' ? widget.current.value : '🌸';
     _selectedColor = widget.current.backgroundColor;
     if (widget.current.type == 'photo') {
       try {
         _photoBytes = base64Decode(widget.current.value);
-      } catch (_) {}
+      } catch (_) {
+        _photoBytes = null;
+      }
+    } else {
+      _photoBytes = null;
     }
   }
 
@@ -199,7 +229,7 @@ class _AvatarPickerState extends State<AvatarPicker> {
         const SizedBox(height: 16),
         // Цвет фона
         Text(
-          'Цвет аватара',
+          'Цвет фона аватара',
           style: TextStyle(color: Colors.grey[500], fontSize: 13),
         ),
         const SizedBox(height: 10),
